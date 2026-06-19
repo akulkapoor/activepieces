@@ -5,6 +5,7 @@ import dayjs from 'dayjs'
 import { continueIfFailureHandler, runWithExponentialBackoff } from '../helper/error-handling'
 import { flowRunProgressReporter } from '../helper/flow-run-progress-reporter'
 import { pieceLoader } from '../helper/piece-loader'
+import { engineSensitivityHelper } from '../helper/sensitivity-helper'
 import { createFileUploader } from '../piece-context/file-uploader'
 import { createFlowsContext } from '../piece-context/flows'
 import { createContextStore } from '../piece-context/store'
@@ -44,6 +45,12 @@ const executeAction: ActionHandler<PieceAction> = async ({ action, executionStat
         if (isNil(action.settings.actionName)) {
             throw new EngineGenericError('ActionNameNotSetError', 'Action name is not set')
         }
+
+        const sensitivityManifest = await engineSensitivityHelper.buildManifestForAction({
+            action,
+            devPieces: constants.devPieces,
+        })
+        executionState = executionState.withStepSensitivityManifest(action.name, sensitivityManifest)
 
         const { pieceAction, piece } = await pieceLoader.getPieceAndActionOrThrow({
             pieceName: action.settings.pieceName,
@@ -192,9 +199,14 @@ const executeAction: ActionHandler<PieceAction> = async ({ action, executionStat
     }))
 
     if (executionStateError) {
+        const sensitivityManifest = executionState.getStepSensitivityManifest(action.name)
+        const errorMessage = engineSensitivityHelper.redactPersistedErrorMessage({
+            message: utils.formatError(executionStateError),
+            manifest: sensitivityManifest,
+        })
         const failedStepOutput = stepOutput
             .setStatus(StepOutputStatus.FAILED)
-            .setErrorMessage(utils.formatError(executionStateError))
+            .setErrorMessage(errorMessage)
             .setDuration(performance.now() - stepStartTime)
 
         return (await executionState
@@ -203,7 +215,7 @@ const executeAction: ActionHandler<PieceAction> = async ({ action, executionStat
                 status: FlowRunStatus.FAILED, failedStep: {
                     name: action.name,
                     displayName: action.displayName,
-                    message: utils.formatError(executionStateError),
+                    message: errorMessage,
                 },
             })
     }

@@ -2,7 +2,7 @@ import { promisify } from 'node:util'
 import { zstdCompress as zstdCompressCallback } from 'node:zlib'
 import { setTimeout } from 'timers/promises'
 import { OutputContext } from '@activepieces/pieces-framework'
-import { DEFAULT_MCP_DATA, EngineGenericError, FileCompression, FileType, FlowActionType, GenericStepOutput, isFlowRunStateTerminal, isNil, logSerializer, RunEnvironment, StepOutputStatus, StepRunResponse, tryCatch, UpdateRunProgressRequest, UploadRunLogsRequest } from '@activepieces/shared'
+import { DEFAULT_MCP_DATA, EngineGenericError, FileCompression, FileType, FlowActionType, GenericStepOutput, isFlowRunStateTerminal, isNil, logSerializer, RunEnvironment, sensitivityUtils, StepOutputStatus, StepRunResponse, tryCatch, UpdateRunProgressRequest, UploadRunLogsRequest } from '@activepieces/shared'
 import { Mutex } from 'async-mutex'
 import dayjs from 'dayjs'
 import { engineFileApi } from '../engine-file-api'
@@ -70,6 +70,11 @@ export const flowRunProgressReporter = {
         const { engineConstants, flowExecutorContext, stepName, stepOutput } = params
         return {
             update: async (params: { data: unknown }) => {
+                const manifest = flowExecutorContext.getStepSensitivityManifest(stepName)
+                const redactedOutput = sensitivityUtils.redactValue({
+                    value: params.data,
+                    paths: manifest.output,
+                })
                 const updated = await flowExecutorContext
                     .upsertStep(stepName, stepOutput.setOutput(params.data))
 
@@ -83,7 +88,7 @@ export const flowRunProgressReporter = {
                         projectId: engineConstants.projectId,
                         stepResponse: {
                             ...stepResponse,
-                            output: params.data,
+                            output: redactedOutput,
                         },
                     })
                 }

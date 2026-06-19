@@ -20,7 +20,9 @@ import {
 import dayjs from 'dayjs'
 import { FastifyBaseLogger } from 'fastify'
 import { fileRepo, fileService } from '../../file/file.service'
+import { projectService } from '../../project/project-service'
 import { flowVersionService } from '../flow-version/flow-version.service'
+import { stepSensitivityHelper } from './sensitivity-helper'
 export const sampleDataService = (log: FastifyBaseLogger) => ({
     async saveSampleDataFileIdsInStep(params: SaveSampleDataParams): Promise<SampleDataSettings> {
         const flowVersion = await flowVersionService(log).getOneOrThrow(params.flowVersionId)
@@ -97,9 +99,20 @@ export async function saveSampleData({
 }: SaveSampleDataParams, log: FastifyBaseLogger): Promise<SaveSampleDataResponse> {
     const flowVersion = await flowVersionService(log).getOneOrThrow(flowVersionId)
     const step = flowStructureUtil.getStepOrThrow(stepName, flowVersion.trigger)
+    const platformId = await projectService(log).getPlatformId(projectId)
+    const manifest = await stepSensitivityHelper.buildManifestForStep({
+        step,
+        platformId,
+        log,
+    })
+    const redactedPayload = stepSensitivityHelper.redactSampleDataPayload({
+        payload,
+        manifest,
+        type: type === SampleDataFileType.INPUT ? 'input' : 'output',
+    })
     const fileType = type === SampleDataFileType.INPUT ? FileType.SAMPLE_DATA_INPUT : FileType.SAMPLE_DATA
     const fileId = await useExistingOrCreateNewSampleId(projectId, flowVersion, step, fileType, log)
-    const payloadWithStringifiedNullOrUndefined = isNil(payload) ? stringifyNullOrUndefined(payload) : payload
+    const payloadWithStringifiedNullOrUndefined = isNil(redactedPayload) ? stringifyNullOrUndefined(redactedPayload) : redactedPayload
     const data = typeof payloadWithStringifiedNullOrUndefined === 'string' ? Buffer.from(payloadWithStringifiedNullOrUndefined) : Buffer.from(JSON.stringify(payloadWithStringifiedNullOrUndefined))
     return fileService(log).save({
         projectId,

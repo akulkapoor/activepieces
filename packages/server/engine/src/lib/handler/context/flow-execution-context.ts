@@ -2,6 +2,7 @@ import {
     apId,
     assertEqual,
     BaseStepOutput,
+    EMPTY_SENSITIVITY_MANIFEST,
     EngineGenericError,
     executionJournal,
     FailedStep,
@@ -14,12 +15,14 @@ import {
     LoopStepOutput,
     LoopStepResult,
     RespondResponse,
+    SensitivityManifest,
     StepOutput,
     StepOutputStatus,
     StepOutputType,
 } from '@activepieces/shared'
 import { engineFileApi } from '../../engine-file-api'
 import { loggingUtils } from '../../helper/logging-utils'
+import { engineSensitivityHelper } from '../../helper/sensitivity-helper'
 import { utils } from '../../utils'
 import { StepExecutionPath } from './step-execution-path'
 
@@ -38,6 +41,7 @@ export class FlowExecutorContext {
     engineApi?: EngineApiConfig
     resolvedStepOutputCache: Map<string, Promise<unknown>>
     slicingEnabled: boolean
+    stepSensitivityManifests: Readonly<Record<string, SensitivityManifest>>
 
     /**
      * Execution time in milliseconds
@@ -55,6 +59,7 @@ export class FlowExecutorContext {
         this.engineApi = copyFrom?.engineApi
         this.resolvedStepOutputCache  = copyFrom?.resolvedStepOutputCache  ?? new Map()
         this.slicingEnabled = copyFrom?.slicingEnabled ?? true
+        this.stepSensitivityManifests = copyFrom?.stepSensitivityManifests ?? {}
     }
 
     static empty(params?: FlowExecutorContextInit): FlowExecutorContext {
@@ -117,8 +122,26 @@ export class FlowExecutorContext {
         })
     }
 
+    public withStepSensitivityManifest(stepName: string, manifest: SensitivityManifest): FlowExecutorContext {
+        return new FlowExecutorContext({
+            ...this,
+            stepSensitivityManifests: {
+                ...this.stepSensitivityManifests,
+                [stepName]: manifest,
+            },
+        })
+    }
+
+    public getStepSensitivityManifest(stepName: string): SensitivityManifest {
+        return this.stepSensitivityManifests[stepName] ?? EMPTY_SENSITIVITY_MANIFEST
+    }
+
     public async upsertStep(stepName: string, stepOutput: BaseStepOutput): Promise<FlowExecutorContext> {
-        const truncated = withTruncatedInput(stepOutput)
+        const manifest = this.getStepSensitivityManifest(stepName)
+        const redacted = stepOutput.outputType === StepOutputType.SLICE
+            ? stepOutput
+            : engineSensitivityHelper.applySensitivityRedaction({ stepOutput, manifest })
+        const truncated = withTruncatedInput(redacted)
         let finalized: BaseStepOutput
         if (truncated.type === FlowActionType.LOOP_ON_ITEMS) {
             finalized = truncated
