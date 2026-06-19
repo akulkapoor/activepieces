@@ -1,4 +1,4 @@
-import { OutputSchema, PieceProperty, PiecePropertyMap, PropertyType } from '@activepieces/pieces-framework'
+import { pieceSensitivityUtils } from '@activepieces/pieces-framework'
 import {
     BaseStepOutput,
     EMPTY_SENSITIVITY_MANIFEST,
@@ -7,40 +7,11 @@ import {
     FlowTrigger,
     FlowTriggerType,
     isNil,
-    OutputSchemaFieldSnapshot,
-    PiecePropertySnapshot,
     SensitivityManifest,
     sensitivityUtils,
     tryParseFriendlyPieceError,
 } from '@activepieces/shared'
 import { pieceLoader } from './piece-loader'
-
-function piecePropertyMapToSnapshots(propertyMap: PiecePropertyMap): PiecePropertySnapshot[] {
-    return Object.entries(propertyMap).map(([name, property]) => ({
-        name,
-        type: property.type,
-        ...extractNestedInputProperties(property),
-    }))
-}
-
-function extractNestedInputProperties(property: PieceProperty): { properties?: PiecePropertySnapshot[] } {
-    if (property.type === PropertyType.ARRAY && !isNil(property.properties)) {
-        return {
-            properties: Object.entries(property.properties).map(([nestedName, nestedProperty]) => ({
-                name: nestedName,
-                type: nestedProperty.type,
-            })),
-        }
-    }
-    return {}
-}
-
-function outputSchemaToFieldSnapshots(outputSchema: OutputSchema | undefined): OutputSchemaFieldSnapshot[] | undefined {
-    if (isNil(outputSchema)) {
-        return undefined
-    }
-    return outputSchema.fields
-}
 
 function applySensitivityRedaction<T extends BaseStepOutput>({
     stepOutput,
@@ -106,8 +77,8 @@ async function buildManifestForAction({
             })
             return sensitivityUtils.buildSensitivityManifest({
                 sensitiveFields: pieceAction.settings.sensitiveFields,
-                inputProperties: piecePropertyMapToSnapshots(pieceStep.props),
-                outputSchemaFields: outputSchemaToFieldSnapshots(pieceStep.outputSchema),
+                inputProperties: pieceSensitivityUtils.piecePropertyMapToSnapshots(pieceStep.props),
+                outputSchemaFields: pieceSensitivityUtils.outputSchemaToFieldSnapshots(pieceStep.outputSchema),
                 includeAuthField: pieceStep.requireAuth,
             })
         }
@@ -143,8 +114,8 @@ async function buildManifestForTrigger({
     })
     return sensitivityUtils.buildSensitivityManifest({
         sensitiveFields: pieceTrigger.settings.sensitiveFields,
-        inputProperties: piecePropertyMapToSnapshots(pieceStep.props),
-        outputSchemaFields: outputSchemaToFieldSnapshots(pieceStep.outputSchema),
+        inputProperties: pieceSensitivityUtils.piecePropertyMapToSnapshots(pieceStep.props),
+        outputSchemaFields: pieceSensitivityUtils.outputSchemaToFieldSnapshots(pieceStep.outputSchema),
         includeAuthField: pieceStep.requireAuth,
     })
 }

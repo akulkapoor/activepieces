@@ -1,37 +1,16 @@
-import { PieceProperty, PiecePropertyMap, PropertyType } from '@activepieces/pieces-framework'
+import { pieceSensitivityUtils } from '@activepieces/pieces-framework'
 import {
     EMPTY_SENSITIVITY_MANIFEST,
     FlowAction,
     FlowActionType,
     FlowTriggerType,
     isNil,
-    PiecePropertySnapshot,
     SensitivityManifest,
     sensitivityUtils,
     Step,
 } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { pieceMetadataService } from '../../pieces/metadata/piece-metadata-service'
-
-function piecePropertyMapToSnapshots(propertyMap: PiecePropertyMap): PiecePropertySnapshot[] {
-    return Object.entries(propertyMap).map(([name, property]) => ({
-        name,
-        type: property.type,
-        ...extractNestedInputProperties(property),
-    }))
-}
-
-function extractNestedInputProperties(property: PieceProperty): { properties?: PiecePropertySnapshot[] } {
-    if (property.type === PropertyType.ARRAY && !isNil(property.properties)) {
-        return {
-            properties: Object.entries(property.properties).map(([nestedName, nestedProperty]) => ({
-                name: nestedName,
-                type: nestedProperty.type,
-            })),
-        }
-    }
-    return {}
-}
 
 async function buildManifestForStep({
     step,
@@ -59,8 +38,8 @@ async function buildManifestForStep({
             }
             return sensitivityUtils.buildSensitivityManifest({
                 sensitiveFields: pieceAction.settings.sensitiveFields,
-                inputProperties: piecePropertyMapToSnapshots(action.props),
-                outputSchemaFields: action.outputSchema?.fields,
+                inputProperties: pieceSensitivityUtils.piecePropertyMapToSnapshots(action.props),
+                outputSchemaFields: pieceSensitivityUtils.outputSchemaToFieldSnapshots(action.outputSchema),
                 includeAuthField: action.requireAuth,
             })
         }
@@ -90,8 +69,8 @@ async function buildManifestForStep({
             }
             return sensitivityUtils.buildSensitivityManifest({
                 sensitiveFields: pieceTrigger.settings.sensitiveFields,
-                inputProperties: piecePropertyMapToSnapshots(trigger.props),
-                outputSchemaFields: trigger.outputSchema?.fields,
+                inputProperties: pieceSensitivityUtils.piecePropertyMapToSnapshots(trigger.props),
+                outputSchemaFields: pieceSensitivityUtils.outputSchemaToFieldSnapshots(trigger.outputSchema),
                 includeAuthField: false,
             })
         }
@@ -111,9 +90,6 @@ function redactSampleDataPayload({
     const paths = type === 'input' ? manifest.input : manifest.output
     if (paths.length === 0) {
         return payload
-    }
-    if (typeof payload === 'string') {
-        return sensitivityUtils.redactValue({ value: payload, paths })
     }
     return sensitivityUtils.redactValue({ value: payload, paths })
 }
