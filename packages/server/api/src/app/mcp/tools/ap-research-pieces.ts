@@ -68,8 +68,8 @@ export const apResearchPiecesTool = (mcp: ProjectScopedMcpServer, log: FastifyBa
     }
 }
 
-function summarizeComponent(c: { name: string, displayName: string, description: string, requireAuth: boolean }): ComponentSummary {
-    return { name: c.name, displayName: c.displayName, description: c.description, requiresAuth: c.requireAuth }
+function summarizeComponent(c: { name: string, displayName: string, description: string, requireAuth?: boolean }): ComponentSummary {
+    return { name: c.name, displayName: c.displayName, description: c.description, requiresAuth: c.requireAuth ?? false }
 }
 
 async function bulkLookup({ pieceNames, projectId, platformId, log }: {

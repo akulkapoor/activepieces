@@ -135,7 +135,7 @@ function diagnosePieceProps({ props, input, pieceAuth, requireAuth, componentTyp
 
     const unknownKeys = Object.keys(input).filter((key) => !validPropKeys.has(key) && !INTERNAL_INPUT_KEYS.has(key))
 
-    const hasAuth = pieceAuth !== undefined && pieceAuth !== null && requireAuth
+    const hasAuth = pieceAuth !== undefined && pieceAuth !== null && (requireAuth ?? false)
     if (hasAuth && !input.auth) {
         missing.push('auth (connection required — use ap_list_connections)')
     }
@@ -619,7 +619,7 @@ type DiagnosePiecePropsParams = {
     props: PiecePropertyMap
     input: Record<string, unknown>
     pieceAuth: unknown
-    requireAuth: boolean
+    requireAuth: boolean | undefined
     componentType: 'action' | 'trigger'
 }
 
@@ -654,7 +654,7 @@ type LookupPieceComponentParams = {
 }
 
 type LookupPieceComponentResult =
-    | { piece: PieceMetadataModel, component: { props: PiecePropertyMap, requireAuth: boolean, name: string, displayName: string, description: string, outputSchema?: OutputSchema, aiMetadata?: AiMetadata, sampleData?: unknown }, pieceName: string, error?: never }
+    | { piece: PieceMetadataModel, component: { props: PiecePropertyMap, requireAuth?: boolean, name: string, displayName: string, description: string, outputSchema?: OutputSchema, aiMetadata?: AiMetadata, sampleData?: unknown }, pieceName: string, error?: never }
     | { error: McpToolResult, piece?: never, component?: never, pieceName?: never }
 
 type ResolveRouterStepResult =
