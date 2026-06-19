@@ -1,6 +1,9 @@
 import { FriendlyPieceError, tryParseFriendlyPieceError } from '../../core/common/friendly-piece-error'
 import { isNil } from '../../core/common/utils/utils'
+import { StepOutput } from '../flow-run/execution/step-output'
+import { FlowActionType } from '../flows/actions/action'
 import {
+    EMPTY_SENSITIVITY_MANIFEST,
     SENSITIVE_VALUE_PLACEHOLDER,
     SensitiveFields,
     SensitivityManifest,
@@ -159,9 +162,12 @@ function collectInputPropertyPaths({
             continue
         }
         if (!isNil(property.properties) && property.properties.length > 0) {
+            const nestedPrefix = property.type === 'ARRAY'
+                ? `${propertyPath}[]`
+                : propertyPath
             paths.push(...collectInputPropertyPaths({
                 properties: property.properties,
-                prefix: propertyPath,
+                prefix: nestedPrefix,
             }))
         }
     }
@@ -214,17 +220,80 @@ function redactStepOutput({
             paths: manifest.output,
         })
     }
-    if ('errorMessage' in stepOutput && !isNil(stepOutput['errorMessage'])) {
-        const errorPaths = uniquePaths([...manifest.input, ...manifest.output])
-        const parsed = tryParseFriendlyPieceError(stepOutput['errorMessage'])
-        if (!isNil(parsed)) {
-            redacted['errorMessage'] = JSON.stringify(redactFriendlyPieceError({
-                error: parsed,
-                paths: errorPaths,
-            }))
-        }
+    if ('errorMessage' in stepOutput && typeof stepOutput['errorMessage'] === 'string') {
+        redacted['errorMessage'] = redactPersistedErrorMessage({
+            message: stepOutput['errorMessage'],
+            manifest,
+        })
     }
     return redacted
+}
+
+function tryParseJsonObject(value: string): Record<string, unknown> | undefined {
+    try {
+        const parsed: unknown = JSON.parse(value)
+        if (isObjectRecord(parsed)) {
+            return parsed
+        }
+    }
+    catch {
+        return undefined
+    }
+    return undefined
+}
+
+function redactPersistedErrorMessage({
+    message,
+    manifest,
+}: RedactPersistedErrorMessageParams): string {
+    if (manifest.input.length === 0 && manifest.output.length === 0) {
+        return message
+    }
+    const errorPaths = uniquePaths([...manifest.input, ...manifest.output])
+    const parsed = tryParseFriendlyPieceError(message)
+    if (!isNil(parsed)) {
+        return JSON.stringify(redactFriendlyPieceError({
+            error: parsed,
+            paths: errorPaths,
+        }))
+    }
+    const jsonObject = tryParseJsonObject(message)
+    if (!isNil(jsonObject)) {
+        return JSON.stringify(redactValue({
+            value: jsonObject,
+            paths: errorPaths,
+        }))
+    }
+    return message
+}
+
+function applyStepOutputRedaction<T extends PersistedStepOutputShape>({
+    stepOutput,
+    manifest,
+}: ApplyStepOutputRedactionParams<T>): T {
+    const redacted = redactStepOutput({ stepOutput, manifest })
+    const redactedErrorMessage = redacted['errorMessage']
+    return {
+        ...stepOutput,
+        input: redacted['input'],
+        output: redacted['output'],
+        ...(typeof redactedErrorMessage === 'string' ? { errorMessage: redactedErrorMessage } : {}),
+    }
+}
+
+function redactSampleData({
+    payload,
+    manifest,
+    type,
+}: RedactSampleDataParams): unknown {
+    if (manifest.input.length === 0 && manifest.output.length === 0) {
+        return payload
+    }
+    const paths = type === 'input' ? manifest.input : manifest.output
+    if (paths.length === 0) {
+        return payload
+    }
+    return redactValue({ value: payload, paths })
 }
 
 function redactFriendlyPieceError({
@@ -260,11 +329,65 @@ function isSensitiveInputPropertyType(propertyType: string): boolean {
     return SENSITIVE_INPUT_PROPERTY_TYPES.has(propertyType)
 }
 
+function redactExecutionStep({
+    step,
+    stepName,
+    stepSensitivityManifests,
+}: RedactExecutionStepParams): StepOutput {
+    const manifest = stepSensitivityManifests[stepName] ?? EMPTY_SENSITIVITY_MANIFEST
+    const redactedBase = applyStepOutputRedaction({ stepOutput: step, manifest })
+
+    if (step.type === FlowActionType.LOOP_ON_ITEMS && !isNil(step.output)) {
+        const loopOutput = step.output
+        const redactedIterations = loopOutput.iterations.map((iteration) =>
+            redactExecutionSteps({ steps: iteration, stepSensitivityManifests }),
+        )
+        return Object.assign(
+            Object.create(Object.getPrototypeOf(step)),
+            step,
+            {
+                input: redactedBase.input,
+                errorMessage: redactedBase.errorMessage,
+                output: {
+                    ...loopOutput,
+                    iterations: redactedIterations,
+                },
+            },
+        )
+    }
+
+    return Object.assign(
+        Object.create(Object.getPrototypeOf(step)),
+        step,
+        {
+            input: redactedBase.input,
+            output: redactedBase.output,
+            errorMessage: redactedBase.errorMessage,
+        },
+    )
+}
+
+function redactExecutionSteps({
+    steps,
+    stepSensitivityManifests,
+}: RedactExecutionStepsParams): Record<string, StepOutput> {
+    return Object.fromEntries(
+        Object.entries(steps).map(([stepName, step]) => [
+            stepName,
+            redactExecutionStep({ step, stepName, stepSensitivityManifests }),
+        ]),
+    )
+}
+
 export const sensitivityUtils = {
+    applyStepOutputRedaction,
     buildSensitivityManifest,
+    redactExecutionSteps,
     redactValue,
     redactStepOutput,
     redactFriendlyPieceError,
+    redactPersistedErrorMessage,
+    redactSampleData,
     isSensitiveInputPropertyType,
     parsePathSegments,
 }
@@ -320,11 +443,50 @@ type RedactFriendlyPieceErrorParams = {
     paths: readonly string[]
 }
 
+type PersistedStepOutputShape = {
+    input: unknown
+    output?: unknown
+    errorMessage?: string
+}
+
+type ApplyStepOutputRedactionParams<T extends PersistedStepOutputShape> = {
+    stepOutput: T
+    manifest: SensitivityManifest
+}
+
+type RedactPersistedErrorMessageParams = {
+    message: string
+    manifest: SensitivityManifest
+}
+
+type RedactSampleDataParams = {
+    payload: unknown
+    manifest: SensitivityManifest
+    type: 'input' | 'output'
+}
+
+type RedactExecutionStepParams = {
+    step: StepOutput
+    stepName: string
+    stepSensitivityManifests: Readonly<Record<string, SensitivityManifest>>
+}
+
+type RedactExecutionStepsParams = {
+    steps: Readonly<Record<string, StepOutput>>
+    stepSensitivityManifests: Readonly<Record<string, SensitivityManifest>>
+}
+
 export type {
+    ApplyStepOutputRedactionParams,
     BuildSensitivityManifestParams,
     OutputSchemaFieldSnapshot,
     PiecePropertySnapshot,
+    PersistedStepOutputShape,
+    RedactExecutionStepParams,
+    RedactExecutionStepsParams,
     RedactFriendlyPieceErrorParams,
+    RedactPersistedErrorMessageParams,
+    RedactSampleDataParams,
     RedactStepOutputParams,
     RedactValueParams,
 }
