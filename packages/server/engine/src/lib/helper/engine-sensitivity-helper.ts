@@ -5,6 +5,7 @@ import {
     isNil,
     SensitivityManifest,
     Step,
+    tryCatch,
 } from '@activepieces/shared'
 import { pieceLoader } from './piece-loader'
 
@@ -64,8 +65,20 @@ async function buildManifestForStep({
     return pieceSensitivityUtils.buildManifestFromStep({ step, pieceComponent })
 }
 
+async function buildManifestForRestoredStep({
+    step,
+    devPieces,
+}: BuildManifestForStepParams): Promise<SensitivityManifest> {
+    const { data: pieceComponent } = await tryCatch(() => resolvePieceComponent({ step, devPieces }))
+    return pieceSensitivityUtils.buildManifestFromStep({
+        step,
+        pieceComponent: pieceComponent ?? null,
+    })
+}
+
 export const engineSensitivityHelper = {
     buildManifestForStep,
+    buildManifestForRestoredStep,
 }
 
 type BuildManifestForStepParams = {

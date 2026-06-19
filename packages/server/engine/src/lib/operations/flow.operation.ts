@@ -220,7 +220,7 @@ async function attachSensitivityManifestsForExecutedSteps({
         if (!restoredStepNames.has(step.name)) {
             continue
         }
-        const sensitivityManifest = await engineSensitivityHelper.buildManifestForStep({
+        const sensitivityManifest = await engineSensitivityHelper.buildManifestForRestoredStep({
             step,
             devPieces,
         })
