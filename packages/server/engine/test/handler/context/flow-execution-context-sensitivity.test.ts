@@ -60,8 +60,8 @@ describe('FlowExecutorContext.upsertStep sensitivity', () => {
     })
 })
 
-describe('FlowExecutorContext persistence redaction', () => {
-    it('redacts sensitive fields only when preparing persisted steps', async () => {
+describe('FlowExecutorContext display redaction', () => {
+    it('redacts sensitive fields for display-only surfaces', async () => {
         const context = new FlowExecutorContext().withStepSensitivityManifest('step_1', {
             input: ['apiKey'],
             output: ['access_token'],

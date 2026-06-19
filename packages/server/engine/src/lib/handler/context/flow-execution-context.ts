@@ -137,6 +137,8 @@ export class FlowExecutorContext {
     }
 
     public getRedactedStepsForPersistence(): Record<string, StepOutput> {
+        // Operational log files keep real values so RESUME/retry can restore them.
+        // Call this when streaming to the UI or other display-only surfaces.
         return sensitivityUtils.redactExecutionSteps({
             steps: this.steps,
             stepSensitivityManifests: this.stepSensitivityManifests,
