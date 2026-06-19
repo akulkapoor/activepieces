@@ -26,6 +26,7 @@ export type OutputSchemaField = {
    * key / `Item N` when absent or empty.
    */
   labelKey?: string;
+  sensitive?: boolean;
   currency?: string;
   children?: OutputSchemaField[];
   listItems?: OutputSchemaField[];
