@@ -14,7 +14,6 @@ import {
     GenericStepOutput,
     isNil,
     LoopStepOutput,
-    LoopStepResult,
     ResumePayload,
     ResumeReason,
     sensitivityUtils,
@@ -214,7 +213,7 @@ async function attachSensitivityManifestsForExecutedSteps({
     devPieces,
 }: AttachSensitivityManifestsParams): Promise<FlowExecutorContext> {
     let next = flowContext
-    const restoredStepNames = collectRestoredStepNames({ steps: next.steps })
+    const restoredStepNames = engineSensitivityHelper.collectRestoredStepNames({ steps: next.steps })
     const candidateSteps = [flowVersion.trigger, ...flowStructureUtil.getAllSteps(flowVersion.trigger)]
     for (const step of candidateSteps) {
         if (!restoredStepNames.has(step.name)) {
@@ -227,23 +226,6 @@ async function attachSensitivityManifestsForExecutedSteps({
         next = next.withStepSensitivityManifest(step.name, sensitivityManifest)
     }
     return next
-}
-
-function collectRestoredStepNames({ steps }: CollectRestoredStepNamesParams): Set<string> {
-    const names = new Set<string>()
-    for (const [stepName, output] of Object.entries(steps)) {
-        names.add(stepName)
-        if (output.type !== FlowActionType.LOOP_ON_ITEMS || isNil(output.output)) {
-            continue
-        }
-        const loopOutput = output.output as LoopStepResult
-        for (const iteration of loopOutput.iterations ?? []) {
-            for (const nestedStepName of Object.keys(iteration)) {
-                names.add(nestedStepName)
-            }
-        }
-    }
-    return names
 }
 
 async function resolveExecuteFlowOperation(operation: ExecuteFlowOperation): Promise<ResolvedExecuteFlowOperation> {
@@ -319,8 +301,4 @@ type AttachSensitivityManifestsParams = {
     flowContext: FlowExecutorContext
     flowVersion: ResolvedExecuteFlowOperation['flowVersion']
     devPieces: string[]
-}
-
-type CollectRestoredStepNamesParams = {
-    steps: Readonly<Record<string, StepOutput>>
 }

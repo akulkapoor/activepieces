@@ -5,6 +5,7 @@ import {
     isNil,
     SensitivityManifest,
     Step,
+    StepOutput,
     tryCatch,
 } from '@activepieces/shared'
 import { pieceLoader } from './piece-loader'
@@ -76,9 +77,32 @@ async function buildManifestForRestoredStep({
     })
 }
 
+function collectRestoredStepNames({ steps }: CollectRestoredStepNamesParams): Set<string> {
+    const names = new Set<string>()
+    collectStepNamesFromStepMap({ steps, names })
+    return names
+}
+
+function collectStepNamesFromStepMap({
+    steps,
+    names,
+}: CollectStepNamesFromStepMapParams): void {
+    for (const [stepName, output] of Object.entries(steps)) {
+        names.add(stepName)
+        if (output.type !== FlowActionType.LOOP_ON_ITEMS || isNil(output.output)) {
+            continue
+        }
+        const loopOutput = output.output
+        for (const iteration of loopOutput.iterations ?? []) {
+            collectStepNamesFromStepMap({ steps: iteration, names })
+        }
+    }
+}
+
 export const engineSensitivityHelper = {
     buildManifestForStep,
     buildManifestForRestoredStep,
+    collectRestoredStepNames,
 }
 
 type BuildManifestForStepParams = {
@@ -89,4 +113,13 @@ type BuildManifestForStepParams = {
 type ResolvePieceComponentParams = {
     step: Step
     devPieces: string[]
+}
+
+type CollectRestoredStepNamesParams = {
+    steps: Readonly<Record<string, StepOutput>>
+}
+
+type CollectStepNamesFromStepMapParams = {
+    steps: Readonly<Record<string, StepOutput>>
+    names: Set<string>
 }
