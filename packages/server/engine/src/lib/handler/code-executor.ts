@@ -1,7 +1,8 @@
 import path from 'path'
 import { LATEST_CONTEXT_VERSION } from '@activepieces/pieces-framework'
-import { CodeAction, EngineGenericError, FlowActionType, FlowRunStatus, GenericStepOutput, isNil, StepOutputStatus } from '@activepieces/shared'
+import { CodeAction, EngineGenericError, FlowActionType, FlowRunStatus, GenericStepOutput, isNil, sensitivityUtils, StepOutputStatus } from '@activepieces/shared'
 import { initCodeSandbox } from '../core/code/code-sandbox'
+import { engineSensitivityHelper } from '../helper/engine-sensitivity-helper'
 import { continueIfFailureHandler, runWithExponentialBackoff } from '../helper/error-handling'
 import { flowRunProgressReporter } from '../helper/flow-run-progress-reporter'
 import { utils } from '../utils'
@@ -30,6 +31,12 @@ const executeAction: ActionHandler<CodeAction> = async ({ action, executionState
     })
 
     const { data: executionStateResult, error: executionStateError } = await utils.tryCatchAndThrowOnEngineError((async () => {
+        const sensitivityManifest = await engineSensitivityHelper.buildManifestForStep({
+            step: action,
+            devPieces: constants.devPieces,
+        })
+        executionState = executionState.withStepSensitivityManifest(action.name, sensitivityManifest)
+
         const { censoredInput, resolvedInput } = await constants.getPropsResolver(LATEST_CONTEXT_VERSION).resolve<Record<string, unknown>>({
             unresolvedInput: action.settings.input,
             executionState,
@@ -59,9 +66,14 @@ const executeAction: ActionHandler<CodeAction> = async ({ action, executionState
     }))
 
     if (executionStateError) {
+        const sensitivityManifest = executionState.getStepSensitivityManifest(action.name)
+        const errorMessage = sensitivityUtils.redactPersistedErrorMessage({
+            message: utils.formatError(executionStateError),
+            manifest: sensitivityManifest,
+        })
         const failedStepOutput = stepOutput
             .setStatus(StepOutputStatus.FAILED)
-            .setErrorMessage(utils.formatError(executionStateError))
+            .setErrorMessage(errorMessage)
             .setDuration(performance.now() - stepStartTime)
 
         return (await executionState
@@ -69,7 +81,7 @@ const executeAction: ActionHandler<CodeAction> = async ({ action, executionState
             .setVerdict({ status: FlowRunStatus.FAILED, failedStep: {
                 name: action.name,
                 displayName: action.displayName,
-                message: utils.formatError(executionStateError),
+                message: errorMessage,
             } })
     }
 
