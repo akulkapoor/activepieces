@@ -65,7 +65,7 @@ When the input contains an `ap-formula-v1::{...}` wrapper, `resolveInputAsync` r
 The engine's `resolveSingleToken` checks for the `variables` prefix first, then `connections`, then evaluates the token as a regular step reference. The `variables` branch:
 
 1. Parses the name out of `variables['NAME']` (bracket form) or `variables.NAME` (dot form).
-2. If `censoredInput` (used to build the redacted copy of the resolved input), returns `[REDACTED]`.
+2. If `censoredInput` (used to build the redacted copy of the resolved input), returns `**REDACTED**`.
 3. Otherwise calls `createVariableResolver({ engineToken, projectId, apiUrl }).obtain(name)`, which fetches `/v1/worker/variables/:name` with the engine principal token.
 4. Returns the plaintext string. The mention always resolves to a `string`; there is no sub-field access (`.secret_text` is implicit).
 

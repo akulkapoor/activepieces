@@ -4,7 +4,6 @@ import {
     FlowActionType,
     FlowTriggerType,
     FlowVersion,
-    SENSITIVE_VALUE_PLACEHOLDER,
     StepOutput,
     StepOutputStatus,
     StepOutputType,
@@ -364,7 +363,7 @@ describe('aiUsageTracker extractor', () => {
                 step_1: {
                     type: FlowActionType.PIECE,
                     status: StepOutputStatus.SUCCEEDED,
-                    input: { provider: SENSITIVE_VALUE_PLACEHOLDER, model: SENSITIVE_VALUE_PLACEHOLDER },
+                    input: { provider: '**REDACTED**', model: '**REDACTED**' },
                 },
             }),
             flowVersion,

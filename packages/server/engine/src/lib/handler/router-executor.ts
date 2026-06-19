@@ -1,7 +1,6 @@
 import { LATEST_CONTEXT_VERSION } from '@activepieces/pieces-framework'
-import { BranchCondition, BranchExecutionType, BranchOperator, EngineGenericError, FlowRunStatus, isNil, RouterAction, RouterActionSettings, RouterExecutionType, RouterStepOutput, sensitivityUtils, StepOutputStatus } from '@activepieces/shared'
+import { BranchCondition, BranchExecutionType, BranchOperator, EngineGenericError, FlowRunStatus, isNil, RouterAction, RouterActionSettings, RouterExecutionType, RouterStepOutput, StepOutputStatus } from '@activepieces/shared'
 import dayjs from 'dayjs'
-import { engineSensitivityHelper } from '../helper/engine-sensitivity-helper'
 import { utils } from '../utils'
 import { BaseExecutor } from './base-executor'
 import { EngineConstants } from './context/engine-constants'
@@ -15,12 +14,6 @@ export const routerExecuter: BaseExecutor<RouterAction> = {
         constants,
     }) {
         const stepStartTime = performance.now()
-        const sensitivityManifest = await engineSensitivityHelper.buildManifestForStep({
-            step: action,
-            devPieces: constants.devPieces,
-        })
-        executionState = executionState.withStepSensitivityManifest(action.name, sensitivityManifest)
-
         const { data: resolved, error: resolveError } = await utils.tryCatchAndThrowOnEngineError(() =>
             constants.getPropsResolver(LATEST_CONTEXT_VERSION).resolve<RouterActionSettings>({
                 unresolvedInput: {
@@ -30,10 +23,7 @@ export const routerExecuter: BaseExecutor<RouterAction> = {
             }),
         )
         if (resolveError) {
-            const errorMessage = sensitivityUtils.redactPersistedErrorMessage({
-                message: utils.formatError(resolveError),
-                manifest: sensitivityManifest,
-            })
+            const errorMessage = utils.formatError(resolveError)
             const failedStepOutput = RouterStepOutput.init({ input: {} })
                 .setStatus(StepOutputStatus.FAILED)
                 .setErrorMessage(errorMessage)
@@ -122,10 +112,7 @@ async function handleRouterExecution({ action, executionState, constants, censor
         return (await executionState.upsertStep(action.name, failedStepOutput)).setVerdict({ status: FlowRunStatus.FAILED, failedStep: {
             name: action.name,
             displayName: action.displayName,
-            message: sensitivityUtils.redactPersistedErrorMessage({
-                message: utils.formatError(executionStateError),
-                manifest: executionState.getStepSensitivityManifest(action.name),
-            }),
+            message: utils.formatError(executionStateError),
         } })
     }
 

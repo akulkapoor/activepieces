@@ -1,6 +1,5 @@
 import { LATEST_CONTEXT_VERSION } from '@activepieces/pieces-framework'
-import { FlowRunStatus, isNil, LoopOnItemsAction, LoopStepOutput, sensitivityUtils, StepOutputStatus } from '@activepieces/shared'
-import { engineSensitivityHelper } from '../helper/engine-sensitivity-helper'
+import { FlowRunStatus, isNil, LoopOnItemsAction, LoopStepOutput, StepOutputStatus } from '@activepieces/shared'
 import { utils } from '../utils'
 import { BaseExecutor } from './base-executor'
 import { flowExecutor } from './flow-executor'
@@ -16,12 +15,6 @@ export const loopExecutor: BaseExecutor<LoopOnItemsAction> = {
         constants,
     }) {
         const stepStartTime = performance.now()
-        const sensitivityManifest = await engineSensitivityHelper.buildManifestForStep({
-            step: action,
-            devPieces: constants.devPieces,
-        })
-        executionState = executionState.withStepSensitivityManifest(action.name, sensitivityManifest)
-
         const { data: resolved, error: resolveError } = await utils.tryCatchAndThrowOnEngineError(() =>
             constants.getPropsResolver(LATEST_CONTEXT_VERSION).resolve<LoopOnActionResolvedSettings>({
                 unresolvedInput: {
@@ -31,10 +24,7 @@ export const loopExecutor: BaseExecutor<LoopOnItemsAction> = {
             }),
         )
         if (resolveError) {
-            const errorMessage = sensitivityUtils.redactPersistedErrorMessage({
-                message: utils.formatError(resolveError),
-                manifest: sensitivityManifest,
-            })
+            const errorMessage = utils.formatError(resolveError)
             const failedStepOutput = LoopStepOutput.init({ input: {} })
                 .setStatus(StepOutputStatus.FAILED)
                 .setErrorMessage(errorMessage)
