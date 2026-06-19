@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { FlowActionType } from '../../../src/lib/automation/flows/actions/action'
+import { StepOutputStatus } from '../../../src/lib/automation/flow-run/execution/step-output'
 import { SENSITIVE_VALUE_PLACEHOLDER } from '../../../src/lib/automation/sensitivity/sensitivity'
 import { sensitivityUtils } from '../../../src/lib/automation/sensitivity/sensitivity-utils'
 
@@ -24,6 +26,22 @@ describe('sensitivityUtils.buildSensitivityManifest', () => {
         expect(manifest.input).toEqual(expect.arrayContaining(['apiKey', 'auth', 'customNote']))
         expect(manifest.output).toEqual(expect.arrayContaining(['access_token', 'customerEmail']))
         expect(manifest.input).not.toContain('title')
+    })
+
+    it('collects ARRAY nested SECRET_TEXT paths with [] wildcard', () => {
+        const manifest = sensitivityUtils.buildSensitivityManifest({
+            inputProperties: [
+                {
+                    name: 'items',
+                    type: 'ARRAY',
+                    properties: [
+                        { name: 'apiKey', type: 'SECRET_TEXT' },
+                    ],
+                },
+            ],
+        })
+
+        expect(manifest.input).toEqual(['items[].apiKey'])
     })
 })
 
@@ -89,5 +107,113 @@ describe('sensitivityUtils.redactStepOutput', () => {
         expect(parsedError.requestBody.apiKey).toBe(SENSITIVE_VALUE_PLACEHOLDER)
         expect(parsedError.requestBody.title).toBe('hello')
         expect(parsedError.responseBody.access_token).toBe(SENSITIVE_VALUE_PLACEHOLDER)
+    })
+
+    it('redacts JSON object error messages', () => {
+        const redacted = sensitivityUtils.redactStepOutput({
+            stepOutput: {
+                input: {},
+                output: {},
+                errorMessage: JSON.stringify({
+                    apiKey: 'secret-key',
+                    detail: 'failed',
+                }),
+            },
+            manifest: {
+                input: ['apiKey'],
+                output: [],
+            },
+        })
+
+        const parsedError = JSON.parse(String(redacted.errorMessage))
+        expect(parsedError.apiKey).toBe(SENSITIVE_VALUE_PLACEHOLDER)
+        expect(parsedError.detail).toBe('failed')
+    })
+})
+
+describe('sensitivityUtils.redactPersistedErrorMessage', () => {
+    it('redacts friendly piece errors', () => {
+        const message = JSON.stringify({
+            __apErrorVersion: 1,
+            message: 'Request failed',
+            requestBody: { apiKey: 'secret-key' },
+        })
+        const redacted = sensitivityUtils.redactPersistedErrorMessage({
+            message,
+            manifest: { input: ['apiKey'], output: [] },
+        })
+        const parsed = JSON.parse(redacted)
+        expect(parsed.requestBody.apiKey).toBe(SENSITIVE_VALUE_PLACEHOLDER)
+    })
+})
+
+describe('sensitivityUtils.redactExecutionSteps', () => {
+    it('redacts each step using its manifest without mutating the source map', () => {
+        const steps = {
+            step_1: {
+                type: FlowActionType.CODE,
+                status: StepOutputStatus.SUCCEEDED,
+                input: { apiKey: 'secret-key' },
+                output: { access_token: 'token-value' },
+            },
+        }
+
+        const redacted = sensitivityUtils.redactExecutionSteps({
+            steps,
+            stepSensitivityManifests: {
+                step_1: { input: ['apiKey'], output: ['access_token'] },
+            },
+        })
+
+        expect(steps['step_1'].input).toEqual({ apiKey: 'secret-key' })
+        expect(redacted['step_1']?.input).toEqual({ apiKey: SENSITIVE_VALUE_PLACEHOLDER })
+        expect(redacted['step_1']?.output).toEqual({ access_token: SENSITIVE_VALUE_PLACEHOLDER })
+    })
+
+    it('redacts sensitive fields on loop output metadata and nested iterations', () => {
+        const steps = {
+            loop_1: {
+                type: FlowActionType.LOOP_ON_ITEMS,
+                status: StepOutputStatus.SUCCEEDED,
+                input: {},
+                output: {
+                    item: { secret: 'loop-item-secret', name: 'Acme' },
+                    index: 0,
+                    iterations: [
+                        {
+                            child_1: {
+                                type: FlowActionType.CODE,
+                                status: StepOutputStatus.SUCCEEDED,
+                                input: {},
+                                output: { token: 'child-token' },
+                            },
+                        },
+                    ],
+                },
+            },
+        }
+
+        const redacted = sensitivityUtils.redactExecutionSteps({
+            steps,
+            stepSensitivityManifests: {
+                loop_1: { input: [], output: ['item.secret'] },
+                child_1: { input: [], output: ['token'] },
+            },
+        })
+
+        expect(redacted['loop_1']?.output).toEqual({
+            item: { secret: SENSITIVE_VALUE_PLACEHOLDER, name: 'Acme' },
+            index: 0,
+            iterations: [
+                {
+                    child_1: {
+                        type: FlowActionType.CODE,
+                        status: StepOutputStatus.SUCCEEDED,
+                        input: {},
+                        output: { token: SENSITIVE_VALUE_PLACEHOLDER },
+                    },
+                },
+            ],
+        })
     })
 })

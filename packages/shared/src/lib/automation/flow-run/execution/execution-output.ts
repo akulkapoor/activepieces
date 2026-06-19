@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { TriggerPayload } from '../../engine'
+import { SensitivityManifest } from '../../sensitivity/sensitivity'
 import { StepOutput } from './step-output'
 
 export enum ExecutionType {
@@ -10,11 +11,13 @@ export enum ExecutionType {
 export type ExecutionState = {
     steps: Record<string, StepOutput>
     tags: string[]
+    stepSensitivityManifests?: Record<string, SensitivityManifest>
 }
 
 export const ExecutionState = z.object({
     steps: z.record(z.string(), z.unknown()),
     tags: z.array(z.string()),
+    stepSensitivityManifests: z.record(z.string(), SensitivityManifest).optional(),
 })
 
 export enum RunInternalErrorSource {

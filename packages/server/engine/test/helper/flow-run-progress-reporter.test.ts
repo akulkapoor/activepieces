@@ -1,12 +1,17 @@
-import { FlowActionType, FlowRunStatus, GenericStepOutput, StepOutputStatus, StepRunResponse, StreamStepProgress, UpdateRunProgressRequest, UploadRunLogsRequest } from '@activepieces/shared'
+import { promisify } from 'node:util'
+import { zstdDecompress as zstdDecompressCallback } from 'node:zlib'
+import { FlowActionType, FlowRunStatus, GenericStepOutput, SENSITIVE_VALUE_PLACEHOLDER, StepOutputStatus, StepRunResponse, StreamStepProgress, UpdateRunProgressRequest, UploadRunLogsRequest } from '@activepieces/shared'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FlowExecutorContext } from '../../src/lib/handler/context/flow-execution-context'
 import { generateMockEngineConstants } from '../handler/test-helper'
 
-const { uploadRunLogMock, updateRunProgressMock, updateStepProgressMock } = vi.hoisted(() => ({
+const zstdDecompress = promisify(zstdDecompressCallback)
+
+const { uploadRunLogMock, updateRunProgressMock, updateStepProgressMock, uploadLogFileMock } = vi.hoisted(() => ({
     uploadRunLogMock: vi.fn<(request: UploadRunLogsRequest) => Promise<void>>(async () => undefined),
     updateRunProgressMock: vi.fn<(request: UpdateRunProgressRequest) => Promise<void>>(async () => undefined),
     updateStepProgressMock: vi.fn<(request: { projectId: string, stepResponse: StepRunResponse }) => Promise<void>>(async () => undefined),
+    uploadLogFileMock: vi.fn(async () => ({ readUrl: 'https://mock.read.url/logs' })),
 }))
 
 vi.mock('../../src/lib/worker-socket', () => ({
@@ -16,6 +21,12 @@ vi.mock('../../src/lib/worker-socket', () => ({
             updateRunProgress: updateRunProgressMock,
             updateStepProgress: updateStepProgressMock,
         }),
+    },
+}))
+
+vi.mock('../../src/lib/engine-file-api', () => ({
+    engineFileApi: {
+        upload: uploadLogFileMock,
     },
 }))
 
@@ -51,6 +62,7 @@ describe('flow-run-progress-reporter backup ordering', () => {
     beforeEach(() => {
         uploadRunLogMock.mockClear()
         updateRunProgressMock.mockClear()
+        uploadLogFileMock.mockClear()
     })
 
     afterEach(async () => {
@@ -114,6 +126,70 @@ describe('flow-run-progress-reporter backup ordering', () => {
         await flowRunProgressReporter.sendUpdate(buildUpdateParams({ status: FlowRunStatus.RUNNING }))
         await flowRunProgressReporter.backup()
         expect(lastUploadStatus()).toBe(FlowRunStatus.RUNNING)
+    })
+})
+
+describe('flow-run-progress-reporter log backup', () => {
+    beforeEach(() => {
+        uploadRunLogMock.mockClear()
+        uploadLogFileMock.mockClear()
+    })
+
+    afterEach(async () => {
+        await flowRunProgressReporter.shutdown()
+    })
+
+    it('backs up unredacted step outputs so RESUME can restore real values', async () => {
+        flowRunProgressReporter.init()
+
+        const engineConstants = generateMockEngineConstants({
+            streamStepProgress: StreamStepProgress.NONE,
+            engineToken: 'mock-engine-token',
+            internalApiUrl: 'http://127.0.0.1:65535/',
+            logsFileId: 'logs-1',
+            stepNameToTest: 'step_1',
+        })
+
+        let flowExecutorContext = FlowExecutorContext.empty({
+            engineApi: {
+                engineToken: engineConstants.engineToken,
+                internalApiUrl: engineConstants.internalApiUrl,
+            },
+        })
+        flowExecutorContext = flowExecutorContext.withStepSensitivityManifest('step_1', {
+            input: [],
+            output: ['token'],
+        })
+        flowExecutorContext = await flowExecutorContext.upsertStep('step_1', GenericStepOutput.create({
+            type: FlowActionType.CODE,
+            status: StepOutputStatus.SUCCEEDED,
+            input: {},
+            output: { token: 'secret-token', name: 'Acme' },
+        }))
+        flowExecutorContext.verdict = { status: FlowRunStatus.SUCCEEDED, stopResponse: undefined }
+
+        await flowRunProgressReporter.sendUpdate({ engineConstants, flowExecutorContext })
+        await flowRunProgressReporter.backup()
+
+        expect(uploadLogFileMock).toHaveBeenCalled()
+        const uploadCall = uploadLogFileMock.mock.calls.at(-1)![0] as { data: Uint8Array }
+        const parsed = JSON.parse((await zstdDecompress(Buffer.from(uploadCall.data))).toString('utf-8'))
+        expect(parsed.executionState.steps['step_1'].output).toEqual({
+            token: 'secret-token',
+            name: 'Acme',
+        })
+        expect(parsed.executionState.stepSensitivityManifests).toEqual({
+            step_1: {
+                input: [],
+                output: ['token'],
+            },
+        })
+
+        const stepResponse = uploadRunLogMock.mock.calls.at(-1)![0].stepResponse
+        expect(stepResponse?.output).toEqual({
+            token: SENSITIVE_VALUE_PLACEHOLDER,
+            name: 'Acme',
+        })
     })
 })
 

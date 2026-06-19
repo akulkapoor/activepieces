@@ -2,7 +2,7 @@ import { promisify } from 'node:util'
 import { zstdCompress as zstdCompressCallback } from 'node:zlib'
 import { setTimeout } from 'timers/promises'
 import { OutputContext } from '@activepieces/pieces-framework'
-import { DEFAULT_MCP_DATA, EngineGenericError, FileCompression, FileType, FlowActionType, GenericStepOutput, isFlowRunStateTerminal, isNil, logSerializer, RunEnvironment, StepOutputStatus, StepRunResponse, tryCatch, UpdateRunProgressRequest, UploadRunLogsRequest } from '@activepieces/shared'
+import { DEFAULT_MCP_DATA, EngineGenericError, FileCompression, FileType, FlowActionType, GenericStepOutput, isFlowRunStateTerminal, isNil, logSerializer, RunEnvironment, SensitivityManifest, sensitivityUtils, StepOutput, StepOutputStatus, StepRunResponse, tryCatch, UpdateRunProgressRequest, UploadRunLogsRequest } from '@activepieces/shared'
 import { Mutex } from 'async-mutex'
 import dayjs from 'dayjs'
 import { engineFileApi } from '../engine-file-api'
@@ -43,11 +43,16 @@ export const flowRunProgressReporter = {
             if (isNil(step)) {
                 return
             }
+            const redactedStep = redactStepForDisplay({
+                step,
+                stepName: stepNameToUpdate,
+                stepSensitivityManifests: flowExecutorContext.stepSensitivityManifests,
+            })
             await sendUpdateProgress({
                 step: {
                     name: stepNameToUpdate,
                     path: flowExecutorContext.currentPath.path,
-                    output: step,
+                    output: redactedStep,
                 },
                 flowRun: {
                     projectId: engineConstants.projectId,
@@ -70,6 +75,11 @@ export const flowRunProgressReporter = {
         const { engineConstants, flowExecutorContext, stepName, stepOutput } = params
         return {
             update: async (params: { data: unknown }) => {
+                const manifest = flowExecutorContext.getStepSensitivityManifest(stepName)
+                const redactedOutput = sensitivityUtils.redactValue({
+                    value: params.data,
+                    paths: manifest.output,
+                })
                 const updated = await flowExecutorContext
                     .upsertStep(stepName, stepOutput.setOutput(params.data))
 
@@ -83,7 +93,7 @@ export const flowRunProgressReporter = {
                         projectId: engineConstants.projectId,
                         stepResponse: {
                             ...stepResponse,
-                            output: params.data,
+                            output: redactedOutput,
                         },
                     })
                 }
@@ -107,6 +117,7 @@ export const flowRunProgressReporter = {
                 executionState: {
                     steps: flowExecutorContext.steps,
                     tags: Array.from(flowExecutorContext.tags),
+                    stepSensitivityManifests: flowExecutorContext.stepSensitivityManifests,
                 },
             })
             const executionState = await zstdCompress(serialized)
@@ -207,15 +218,31 @@ const extractStepResponse = (params: ExtractStepResponse): StepRunResponse | und
     if (isNil(stepOutput)) {
         return undefined
     }
-    const isSuccess = stepOutput.status === StepOutputStatus.SUCCEEDED || stepOutput.status === StepOutputStatus.PAUSED
+    const redactedStep = redactStepForDisplay({
+        step: stepOutput,
+        stepName: params.stepName,
+        stepSensitivityManifests: params.flowExecutorContext.stepSensitivityManifests,
+    })
+    const isSuccess = redactedStep.status === StepOutputStatus.SUCCEEDED || redactedStep.status === StepOutputStatus.PAUSED
     return {
         runId: params.runId,
         success: isSuccess,
-        input: stepOutput.input,
-        output: stepOutput.output,
-        standardError: isSuccess ? '' : (stepOutput.errorMessage as string),
+        input: redactedStep.input,
+        output: redactedStep.output,
+        standardError: isSuccess ? '' : (redactedStep.errorMessage as string),
         standardOutput: '',
     }
+}
+
+function redactStepForDisplay({
+    step,
+    stepName,
+    stepSensitivityManifests,
+}: RedactStepForDisplayParams): StepOutput {
+    return sensitivityUtils.redactExecutionSteps({
+        steps: { [stepName]: step },
+        stepSensitivityManifests,
+    })[stepName]
 }
 
 type UpdateStepProgressParams = {
@@ -236,4 +263,10 @@ type ExtractStepResponse = {
     flowExecutorContext: FlowExecutorContext
     runId: string
     stepName?: string
+}
+
+type RedactStepForDisplayParams = {
+    step: StepOutput
+    stepName: string
+    stepSensitivityManifests: Readonly<Record<string, SensitivityManifest>>
 }
