@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { STEP_NAME_REGEX } from '../../../core/common'
 import { VersionType } from '../../pieces'
+import { SensitiveFields } from '../../sensitivity'
 import { CodeActionSettings, LoopOnItemsActionSettings, PieceActionSettings, RouterActionSettings } from '../actions/action'
 import { PropertySettings } from '../properties'
 import { SampleDataSetting } from '../sample-data'
@@ -12,6 +13,7 @@ const pieceTriggerSettingsFields = {
     sampleData: SampleDataSetting.optional(),
     propertySettings: z.record(z.string(), PropertySettings),
     customLogoUrl: z.string().optional(),
+    sensitiveFields: SensitiveFields.optional(),
     pieceName: z.string(),
     pieceVersion: VersionType,
     triggerName: z.string().optional(),

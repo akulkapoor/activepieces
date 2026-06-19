@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { STEP_NAME_REGEX } from '../../../core/common'
 import { VersionType } from '../../pieces'
+import { SensitiveFields } from '../../sensitivity'
 import { PropertySettings } from '../properties'
 import { SampleDataSetting } from '../sample-data'
 
@@ -31,6 +32,7 @@ const commonActionProps = {
 const commonActionSettings = {
     sampleData: SampleDataSetting.optional(),
     customLogoUrl: z.string().optional(),
+    sensitiveFields: SensitiveFields.optional(),
 }
 
 export const ActionErrorHandlingOptions = z.object({
