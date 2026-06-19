@@ -7,6 +7,7 @@ import {
     StepOutput,
     StepOutputStatus,
     StepOutputType,
+    SENSITIVE_VALUE_PLACEHOLDER,
 } from '@activepieces/shared'
 import { describe, expect, it, vi } from 'vitest'
 import { aiUsageExtractor } from '../../../../../src/app/flows/flow-run/ai-usage-extractor'
@@ -356,14 +357,16 @@ describe('aiUsageTracker extractor', () => {
         ])
     })
 
-    it('falls back to flow-version settings when the logged model is redacted', async () => {
+    it.each([SENSITIVE_VALUE_PLACEHOLDER, '**REDACTED**'])(
+        'falls back to flow-version settings when the logged model is redacted (%s)',
+        async (redactedValue) => {
         const flowVersion = flowVersionWith([aiAction({ name: 'step_1', actionName: ASK_AI, input: { provider: 'openai', model: 'gpt-4o' } })])
         const usage = await aiUsageExtractor.extractAiUsage({
             steps: steps({
                 step_1: {
                     type: FlowActionType.PIECE,
                     status: StepOutputStatus.SUCCEEDED,
-                    input: { provider: '**REDACTED**', model: '**REDACTED**' },
+                    input: { provider: redactedValue, model: redactedValue },
                 },
             }),
             flowVersion,
