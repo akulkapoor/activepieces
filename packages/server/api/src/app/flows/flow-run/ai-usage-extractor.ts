@@ -9,7 +9,6 @@ import {
     isNil,
     LogSliceRef,
     LoopStepResult,
-    SENSITIVE_VALUE_PLACEHOLDER,
     Step,
     StepOutput,
     StepOutputStatus,
@@ -152,7 +151,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 function cleanString(value: unknown): string | undefined {
-    if (typeof value !== 'string' || value.length === 0 || value === SENSITIVE_VALUE_PLACEHOLDER || value === LEGACY_REDACTED_MARKER) {
+    if (typeof value !== 'string' || value.length === 0 || value === REDACTED_MARKER) {
         return undefined
     }
     return value
@@ -160,7 +159,7 @@ function cleanString(value: unknown): string | undefined {
 
 const RUN_AGENT_ACTION_NAME = 'run_agent'
 const UNKNOWN = 'unknown'
-const LEGACY_REDACTED_MARKER = '**REDACTED**'
+const REDACTED_MARKER = '**REDACTED**'
 const SLEEP_EVERY_N_STEPS = 1000
 
 export const aiUsageExtractor = { extractAiUsage, flowVersionHasAiStep }
