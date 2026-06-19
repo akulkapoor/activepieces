@@ -85,7 +85,6 @@ export const TriggerBase = z.object({
   description: z.string(),
   props: PiecePropertyMap,
   errorHandlingOptions: ErrorHandlingOptionsParam.optional(),
-  requireAuth: z.boolean().optional(),
   type: z.nativeEnum(TriggerStrategy),
   sampleData: z.unknown(),
   handshakeConfiguration: z.custom<WebhookHandshakeConfiguration>().optional(),
@@ -94,8 +93,7 @@ export const TriggerBase = z.object({
   outputSchema: z.custom<OutputSchema>().optional(),
   aiMetadata: AiMetadata.optional(),
 })
-export type TriggerBase = Omit<ActionBase, 'audience' | 'requireAuth'> & {
-  requireAuth?: boolean
+export type TriggerBase = Omit<ActionBase, 'audience'> & {
   type: TriggerStrategy;
   sampleData: unknown,
   handshakeConfiguration?: WebhookHandshakeConfiguration;
