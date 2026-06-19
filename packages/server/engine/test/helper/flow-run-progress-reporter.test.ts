@@ -178,6 +178,12 @@ describe('flow-run-progress-reporter log backup', () => {
             token: 'secret-token',
             name: 'Acme',
         })
+        expect(parsed.executionState.stepSensitivityManifests).toEqual({
+            step_1: {
+                input: [],
+                output: ['token'],
+            },
+        })
 
         const stepResponse = uploadRunLogMock.mock.calls.at(-1)![0].stepResponse
         expect(stepResponse?.output).toEqual({

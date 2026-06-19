@@ -1,13 +1,16 @@
 import { pieceSensitivityUtils } from '@activepieces/pieces-framework'
 import {
     FlowActionType,
+    flowStructureUtil,
     FlowTriggerType,
+    FlowVersion,
     isNil,
     SensitivityManifest,
     Step,
     StepOutput,
     tryCatch,
 } from '@activepieces/shared'
+import { FlowExecutorContext } from '../handler/context/flow-execution-context'
 import { pieceLoader } from './piece-loader'
 
 async function resolvePieceComponent({
@@ -99,10 +102,39 @@ function collectStepNamesFromStepMap({
     }
 }
 
+async function restoreSensitivityManifestsForResume({
+    flowContext,
+    flowVersion,
+    devPieces,
+    persistedManifests,
+}: RestoreSensitivityManifestsForResumeParams): Promise<FlowExecutorContext> {
+    let next = flowContext
+    for (const [stepName, manifest] of Object.entries(persistedManifests ?? {})) {
+        next = next.withStepSensitivityManifest(stepName, manifest)
+    }
+    const restoredStepNames = collectRestoredStepNames({ steps: next.steps })
+    const candidateSteps = [flowVersion.trigger, ...flowStructureUtil.getAllSteps(flowVersion.trigger)]
+    for (const step of candidateSteps) {
+        if (!restoredStepNames.has(step.name)) {
+            continue
+        }
+        if (!isNil(persistedManifests?.[step.name])) {
+            continue
+        }
+        const sensitivityManifest = await buildManifestForRestoredStep({
+            step,
+            devPieces,
+        })
+        next = next.withStepSensitivityManifest(step.name, sensitivityManifest)
+    }
+    return next
+}
+
 export const engineSensitivityHelper = {
     buildManifestForStep,
     buildManifestForRestoredStep,
     collectRestoredStepNames,
+    restoreSensitivityManifestsForResume,
 }
 
 type BuildManifestForStepParams = {
@@ -122,4 +154,11 @@ type CollectRestoredStepNamesParams = {
 type CollectStepNamesFromStepMapParams = {
     steps: Readonly<Record<string, StepOutput>>
     names: Set<string>
+}
+
+type RestoreSensitivityManifestsForResumeParams = {
+    flowContext: FlowExecutorContext
+    flowVersion: FlowVersion
+    devPieces: string[]
+    persistedManifests?: Record<string, SensitivityManifest>
 }
