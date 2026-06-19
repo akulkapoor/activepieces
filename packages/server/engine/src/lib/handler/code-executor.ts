@@ -4,7 +4,7 @@ import { CodeAction, EngineGenericError, FlowActionType, FlowRunStatus, GenericS
 import { initCodeSandbox } from '../core/code/code-sandbox'
 import { continueIfFailureHandler, runWithExponentialBackoff } from '../helper/error-handling'
 import { flowRunProgressReporter } from '../helper/flow-run-progress-reporter'
-import { engineSensitivityHelper } from '../helper/sensitivity-helper'
+import { engineSensitivityHelper } from '../helper/engine-sensitivity-helper'
 import { utils } from '../utils'
 import { ActionHandler, BaseExecutor } from './base-executor'
 

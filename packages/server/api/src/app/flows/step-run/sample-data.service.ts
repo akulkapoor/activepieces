@@ -22,7 +22,7 @@ import { FastifyBaseLogger } from 'fastify'
 import { fileRepo, fileService } from '../../file/file.service'
 import { projectService } from '../../project/project-service'
 import { flowVersionService } from '../flow-version/flow-version.service'
-import { stepSensitivityHelper } from './sensitivity-helper'
+import { sampleDataSensitivityHelper } from './sample-data-sensitivity-helper'
 export const sampleDataService = (log: FastifyBaseLogger) => ({
     async saveSampleDataFileIdsInStep(params: SaveSampleDataParams): Promise<SampleDataSettings> {
         const flowVersion = await flowVersionService(log).getOneOrThrow(params.flowVersionId)
@@ -100,12 +100,12 @@ export async function saveSampleData({
     const flowVersion = await flowVersionService(log).getOneOrThrow(flowVersionId)
     const step = flowStructureUtil.getStepOrThrow(stepName, flowVersion.trigger)
     const platformId = await projectService(log).getPlatformId(projectId)
-    const manifest = await stepSensitivityHelper.buildManifestForStep({
+    const manifest = await sampleDataSensitivityHelper.buildManifestForStep({
         step,
         platformId,
         log,
     })
-    const redactedPayload = stepSensitivityHelper.redactSampleDataPayload({
+    const redactedPayload = sampleDataSensitivityHelper.redactSampleDataPayload({
         payload,
         manifest,
         type: type === SampleDataFileType.INPUT ? 'input' : 'output',

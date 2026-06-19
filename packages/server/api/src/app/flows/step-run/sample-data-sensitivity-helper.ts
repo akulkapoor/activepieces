@@ -94,7 +94,7 @@ function redactSampleDataPayload({
     return sensitivityUtils.redactValue({ value: payload, paths })
 }
 
-export const stepSensitivityHelper = {
+export const sampleDataSensitivityHelper = {
     buildManifestForStep,
     redactSampleDataPayload,
 }

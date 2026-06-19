@@ -22,7 +22,7 @@ import {
 } from '@activepieces/shared'
 import { engineFileApi } from '../../engine-file-api'
 import { loggingUtils } from '../../helper/logging-utils'
-import { engineSensitivityHelper } from '../../helper/sensitivity-helper'
+import { engineSensitivityHelper } from '../../helper/engine-sensitivity-helper'
 import { utils } from '../../utils'
 import { StepExecutionPath } from './step-execution-path'
 
