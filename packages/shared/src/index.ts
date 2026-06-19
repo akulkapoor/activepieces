@@ -37,6 +37,7 @@ export * from './lib/management/ai-providers'
 export * from './lib/management/template'
 
 // automation
+export * from './lib/automation/sensitivity'
 export * from './lib/automation/flows/actions/action'
 export * from './lib/automation/flows/operations'
 export * from './lib/automation/flows/operations/paste-operations'
