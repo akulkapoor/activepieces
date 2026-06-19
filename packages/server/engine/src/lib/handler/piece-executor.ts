@@ -1,7 +1,8 @@
 import { ActionContext, backwardCompatabilityContextUtils, ConstructToolParams, CreateWaitpointHook, CreateWaitpointParams, CreateWaitpointResult, InputPropertyMap, PieceAuthProperty, PiecePropertyMap, RespondHook, RespondHookParams, StaticPropsValue, StopHook, StopHookParams, TagsManager, WaitForWaitpointHook } from '@activepieces/pieces-framework'
-import { AUTHENTICATION_PROPERTY_NAME, EngineGenericError, ExecutionType, FlowActionType, FlowRunStatus, GenericStepOutput, isNil, PausedFlowTimeoutError, PieceAction, RespondResponse, StepOutputStatus } from '@activepieces/shared'
+import { AUTHENTICATION_PROPERTY_NAME, EngineGenericError, ExecutionType, FlowActionType, FlowRunStatus, GenericStepOutput, isNil, PausedFlowTimeoutError, PieceAction, RespondResponse, sensitivityUtils, StepOutputStatus } from '@activepieces/shared'
 import type { ToolSet } from 'ai'
 import dayjs from 'dayjs'
+import { engineSensitivityHelper } from '../helper/engine-sensitivity-helper'
 import { continueIfFailureHandler, runWithExponentialBackoff } from '../helper/error-handling'
 import { flowRunProgressReporter } from '../helper/flow-run-progress-reporter'
 import { pieceLoader } from '../helper/piece-loader'
@@ -44,6 +45,12 @@ const executeAction: ActionHandler<PieceAction> = async ({ action, executionStat
         if (isNil(action.settings.actionName)) {
             throw new EngineGenericError('ActionNameNotSetError', 'Action name is not set')
         }
+
+        const sensitivityManifest = await engineSensitivityHelper.buildManifestForStep({
+            step: action,
+            devPieces: constants.devPieces,
+        })
+        executionState = executionState.withStepSensitivityManifest(action.name, sensitivityManifest)
 
         const { pieceAction, piece } = await pieceLoader.getPieceAndActionOrThrow({
             pieceName: action.settings.pieceName,
@@ -192,9 +199,14 @@ const executeAction: ActionHandler<PieceAction> = async ({ action, executionStat
     }))
 
     if (executionStateError) {
+        const sensitivityManifest = executionState.getStepSensitivityManifest(action.name)
+        const errorMessage = sensitivityUtils.redactPersistedErrorMessage({
+            message: utils.formatError(executionStateError),
+            manifest: sensitivityManifest,
+        })
         const failedStepOutput = stepOutput
             .setStatus(StepOutputStatus.FAILED)
-            .setErrorMessage(utils.formatError(executionStateError))
+            .setErrorMessage(errorMessage)
             .setDuration(performance.now() - stepStartTime)
 
         return (await executionState
@@ -203,7 +215,7 @@ const executeAction: ActionHandler<PieceAction> = async ({ action, executionStat
                 status: FlowRunStatus.FAILED, failedStep: {
                     name: action.name,
                     displayName: action.displayName,
-                    message: utils.formatError(executionStateError),
+                    message: errorMessage,
                 },
             })
     }

@@ -2,6 +2,7 @@ import {
     apId,
     assertEqual,
     BaseStepOutput,
+    EMPTY_SENSITIVITY_MANIFEST,
     EngineGenericError,
     executionJournal,
     FailedStep,
@@ -14,6 +15,8 @@ import {
     LoopStepOutput,
     LoopStepResult,
     RespondResponse,
+    SensitivityManifest,
+    sensitivityUtils,
     StepOutput,
     StepOutputStatus,
     StepOutputType,
@@ -38,6 +41,7 @@ export class FlowExecutorContext {
     engineApi?: EngineApiConfig
     resolvedStepOutputCache: Map<string, Promise<unknown>>
     slicingEnabled: boolean
+    stepSensitivityManifests: Readonly<Record<string, SensitivityManifest>>
 
     /**
      * Execution time in milliseconds
@@ -55,6 +59,7 @@ export class FlowExecutorContext {
         this.engineApi = copyFrom?.engineApi
         this.resolvedStepOutputCache  = copyFrom?.resolvedStepOutputCache  ?? new Map()
         this.slicingEnabled = copyFrom?.slicingEnabled ?? true
+        this.stepSensitivityManifests = copyFrom?.stepSensitivityManifests ?? {}
     }
 
     static empty(params?: FlowExecutorContextInit): FlowExecutorContext {
@@ -114,6 +119,27 @@ export class FlowExecutorContext {
             tags: [...this.tags, ...tags].filter((value, index, self) => {
                 return self.indexOf(value) === index
             }),
+        })
+    }
+
+    public withStepSensitivityManifest(stepName: string, manifest: SensitivityManifest): FlowExecutorContext {
+        return new FlowExecutorContext({
+            ...this,
+            stepSensitivityManifests: {
+                ...this.stepSensitivityManifests,
+                [stepName]: manifest,
+            },
+        })
+    }
+
+    public getStepSensitivityManifest(stepName: string): SensitivityManifest {
+        return this.stepSensitivityManifests[stepName] ?? EMPTY_SENSITIVITY_MANIFEST
+    }
+
+    public getRedactedStepsForPersistence(): Record<string, StepOutput> {
+        return sensitivityUtils.redactExecutionSteps({
+            steps: this.steps,
+            stepSensitivityManifests: this.stepSensitivityManifests,
         })
     }
 
