@@ -25,6 +25,22 @@ describe('sensitivityUtils.buildSensitivityManifest', () => {
         expect(manifest.output).toEqual(expect.arrayContaining(['access_token', 'customerEmail']))
         expect(manifest.input).not.toContain('title')
     })
+
+    it('collects ARRAY nested SECRET_TEXT paths with [] wildcard', () => {
+        const manifest = sensitivityUtils.buildSensitivityManifest({
+            inputProperties: [
+                {
+                    name: 'items',
+                    type: 'ARRAY',
+                    properties: [
+                        { name: 'apiKey', type: 'SECRET_TEXT' },
+                    ],
+                },
+            ],
+        })
+
+        expect(manifest.input).toEqual(['items[].apiKey'])
+    })
 })
 
 describe('sensitivityUtils.redactValue', () => {
@@ -89,5 +105,42 @@ describe('sensitivityUtils.redactStepOutput', () => {
         expect(parsedError.requestBody.apiKey).toBe(SENSITIVE_VALUE_PLACEHOLDER)
         expect(parsedError.requestBody.title).toBe('hello')
         expect(parsedError.responseBody.access_token).toBe(SENSITIVE_VALUE_PLACEHOLDER)
+    })
+
+    it('redacts JSON object error messages', () => {
+        const redacted = sensitivityUtils.redactStepOutput({
+            stepOutput: {
+                input: {},
+                output: {},
+                errorMessage: JSON.stringify({
+                    apiKey: 'secret-key',
+                    detail: 'failed',
+                }),
+            },
+            manifest: {
+                input: ['apiKey'],
+                output: [],
+            },
+        })
+
+        const parsedError = JSON.parse(String(redacted.errorMessage))
+        expect(parsedError.apiKey).toBe(SENSITIVE_VALUE_PLACEHOLDER)
+        expect(parsedError.detail).toBe('failed')
+    })
+})
+
+describe('sensitivityUtils.redactPersistedErrorMessage', () => {
+    it('redacts friendly piece errors', () => {
+        const message = JSON.stringify({
+            __apErrorVersion: 1,
+            message: 'Request failed',
+            requestBody: { apiKey: 'secret-key' },
+        })
+        const redacted = sensitivityUtils.redactPersistedErrorMessage({
+            message,
+            manifest: { input: ['apiKey'], output: [] },
+        })
+        const parsed = JSON.parse(redacted)
+        expect(parsed.requestBody.apiKey).toBe(SENSITIVE_VALUE_PLACEHOLDER)
     })
 })

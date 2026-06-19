@@ -1,6 +1,6 @@
 import path from 'path'
 import { LATEST_CONTEXT_VERSION } from '@activepieces/pieces-framework'
-import { CodeAction, EngineGenericError, FlowActionType, FlowRunStatus, GenericStepOutput, isNil, StepOutputStatus } from '@activepieces/shared'
+import { CodeAction, EngineGenericError, FlowActionType, FlowRunStatus, GenericStepOutput, isNil, sensitivityUtils, StepOutputStatus } from '@activepieces/shared'
 import { initCodeSandbox } from '../core/code/code-sandbox'
 import { continueIfFailureHandler, runWithExponentialBackoff } from '../helper/error-handling'
 import { flowRunProgressReporter } from '../helper/flow-run-progress-reporter'
@@ -67,7 +67,7 @@ const executeAction: ActionHandler<CodeAction> = async ({ action, executionState
 
     if (executionStateError) {
         const sensitivityManifest = executionState.getStepSensitivityManifest(action.name)
-        const errorMessage = engineSensitivityHelper.redactPersistedErrorMessage({
+        const errorMessage = sensitivityUtils.redactPersistedErrorMessage({
             message: utils.formatError(executionStateError),
             manifest: sensitivityManifest,
         })

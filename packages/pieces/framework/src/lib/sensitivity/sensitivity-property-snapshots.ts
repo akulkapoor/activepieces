@@ -1,4 +1,4 @@
-import { isNil, OutputSchemaFieldSnapshot, PiecePropertySnapshot } from '@activepieces/shared'
+import { isNil, OutputSchemaFieldSnapshot, PiecePropertySnapshot, SensitiveFields, sensitivityUtils, SensitivityManifest } from '@activepieces/shared'
 import type { OutputSchema } from '../output-schema'
 import { PieceProperty, PiecePropertyMap } from '../property'
 import { PropertyType } from '../property/input/property-type'
@@ -30,7 +30,29 @@ function outputSchemaToFieldSnapshots(outputSchema: OutputSchema | undefined): O
     return outputSchema.fields
 }
 
+function buildManifestFromComponent({
+    sensitiveFields,
+    props,
+    outputSchema,
+    requireAuth,
+}: BuildManifestFromComponentParams): SensitivityManifest {
+    return sensitivityUtils.buildSensitivityManifest({
+        sensitiveFields,
+        inputProperties: piecePropertyMapToSnapshots(props),
+        outputSchemaFields: outputSchemaToFieldSnapshots(outputSchema),
+        includeAuthField: requireAuth,
+    })
+}
+
 export const pieceSensitivityUtils = {
+    buildManifestFromComponent,
     piecePropertyMapToSnapshots,
     outputSchemaToFieldSnapshots,
+}
+
+type BuildManifestFromComponentParams = {
+    sensitiveFields?: SensitiveFields
+    props: PiecePropertyMap
+    outputSchema?: OutputSchema
+    requireAuth: boolean
 }

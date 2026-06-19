@@ -15,6 +15,7 @@ import {
     SampleDataFileType,
     SampleDataSettings,
     SaveSampleDataResponse,
+    sensitivityUtils,
     Step,
     stringifyNullOrUndefined } from '@activepieces/shared'
 import dayjs from 'dayjs'
@@ -105,7 +106,7 @@ export async function saveSampleData({
         platformId,
         log,
     })
-    const redactedPayload = sampleDataSensitivityHelper.redactSampleDataPayload({
+    const redactedPayload = sensitivityUtils.redactSampleData({
         payload,
         manifest,
         type: type === SampleDataFileType.INPUT ? 'input' : 'output',

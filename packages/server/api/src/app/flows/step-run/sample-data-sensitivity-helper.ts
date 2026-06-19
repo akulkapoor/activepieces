@@ -36,11 +36,11 @@ async function buildManifestForStep({
                     sensitiveFields: pieceAction.settings.sensitiveFields,
                 })
             }
-            return sensitivityUtils.buildSensitivityManifest({
+            return pieceSensitivityUtils.buildManifestFromComponent({
                 sensitiveFields: pieceAction.settings.sensitiveFields,
-                inputProperties: pieceSensitivityUtils.piecePropertyMapToSnapshots(action.props),
-                outputSchemaFields: pieceSensitivityUtils.outputSchemaToFieldSnapshots(action.outputSchema),
-                includeAuthField: action.requireAuth,
+                props: action.props,
+                outputSchema: action.outputSchema,
+                requireAuth: action.requireAuth,
             })
         }
         case FlowActionType.CODE:
@@ -67,11 +67,11 @@ async function buildManifestForStep({
                     sensitiveFields: pieceTrigger.settings.sensitiveFields,
                 })
             }
-            return sensitivityUtils.buildSensitivityManifest({
+            return pieceSensitivityUtils.buildManifestFromComponent({
                 sensitiveFields: pieceTrigger.settings.sensitiveFields,
-                inputProperties: pieceSensitivityUtils.piecePropertyMapToSnapshots(trigger.props),
-                outputSchemaFields: pieceSensitivityUtils.outputSchemaToFieldSnapshots(trigger.outputSchema),
-                includeAuthField: false,
+                props: trigger.props,
+                outputSchema: trigger.outputSchema,
+                requireAuth: resolveTriggerRequireAuth({ trigger, pieceHasAuth: !isNil(piece.auth) }),
             })
         }
         default:
@@ -79,24 +79,18 @@ async function buildManifestForStep({
     }
 }
 
-function redactSampleDataPayload({
-    payload,
-    manifest,
-    type,
-}: RedactSampleDataPayloadParams): unknown {
-    if (manifest.input.length === 0 && manifest.output.length === 0) {
-        return payload
+function resolveTriggerRequireAuth({
+    trigger,
+    pieceHasAuth,
+}: ResolveTriggerRequireAuthParams): boolean {
+    if ('requireAuth' in trigger && typeof trigger.requireAuth === 'boolean') {
+        return trigger.requireAuth
     }
-    const paths = type === 'input' ? manifest.input : manifest.output
-    if (paths.length === 0) {
-        return payload
-    }
-    return sensitivityUtils.redactValue({ value: payload, paths })
+    return pieceHasAuth
 }
 
 export const sampleDataSensitivityHelper = {
     buildManifestForStep,
-    redactSampleDataPayload,
 }
 
 type BuildManifestForStepParams = {
@@ -105,8 +99,7 @@ type BuildManifestForStepParams = {
     log: FastifyBaseLogger
 }
 
-type RedactSampleDataPayloadParams = {
-    payload: unknown
-    manifest: SensitivityManifest
-    type: 'input' | 'output'
+type ResolveTriggerRequireAuthParams = {
+    trigger: { requireAuth?: boolean }
+    pieceHasAuth: boolean
 }

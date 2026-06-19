@@ -16,6 +16,7 @@ import {
     LoopStepOutput,
     ResumePayload,
     ResumeReason,
+    sensitivityUtils,
     StepOutput,
     StepOutputStatus,
     TriggerHookType,
@@ -110,7 +111,7 @@ async function buildFailedTriggerContext({ input, baseContext, error, constants 
         trigger,
         devPieces: constants.devPieces,
     })
-    const message = engineSensitivityHelper.redactPersistedErrorMessage({
+    const message = sensitivityUtils.redactPersistedErrorMessage({
         message: utils.formatExecutionError(error),
         manifest: sensitivityManifest,
     })

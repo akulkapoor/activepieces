@@ -1,5 +1,5 @@
 import { LATEST_CONTEXT_VERSION } from '@activepieces/pieces-framework'
-import { FlowRunStatus, isNil, LoopOnItemsAction, LoopStepOutput, StepOutputStatus } from '@activepieces/shared'
+import { FlowRunStatus, isNil, LoopOnItemsAction, LoopStepOutput, sensitivityUtils, StepOutputStatus } from '@activepieces/shared'
 import { engineSensitivityHelper } from '../helper/engine-sensitivity-helper'
 import { utils } from '../utils'
 import { BaseExecutor } from './base-executor'
@@ -31,7 +31,7 @@ export const loopExecutor: BaseExecutor<LoopOnItemsAction> = {
             }),
         )
         if (resolveError) {
-            const errorMessage = engineSensitivityHelper.redactPersistedErrorMessage({
+            const errorMessage = sensitivityUtils.redactPersistedErrorMessage({
                 message: utils.formatError(resolveError),
                 manifest: sensitivityManifest,
             })

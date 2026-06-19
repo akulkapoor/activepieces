@@ -1,6 +1,5 @@
 import { pieceSensitivityUtils } from '@activepieces/pieces-framework'
 import {
-    BaseStepOutput,
     EMPTY_SENSITIVITY_MANIFEST,
     FlowAction,
     FlowActionType,
@@ -9,53 +8,8 @@ import {
     isNil,
     SensitivityManifest,
     sensitivityUtils,
-    tryParseFriendlyPieceError,
 } from '@activepieces/shared'
 import { pieceLoader } from './piece-loader'
-
-function applySensitivityRedaction<T extends BaseStepOutput>({
-    stepOutput,
-    manifest,
-}: ApplySensitivityRedactionParams<T>): T {
-    if (manifest.input.length === 0 && manifest.output.length === 0) {
-        return stepOutput
-    }
-    const redacted = sensitivityUtils.redactStepOutput({
-        stepOutput: {
-            input: stepOutput.input,
-            output: stepOutput.output,
-            ...(!isNil(stepOutput.errorMessage) ? { errorMessage: stepOutput.errorMessage } : {}),
-        },
-        manifest,
-    })
-    return Object.assign(
-        Object.create(Object.getPrototypeOf(stepOutput)),
-        stepOutput,
-        {
-            input: redacted.input,
-            output: redacted.output,
-            ...(!isNil(redacted.errorMessage) ? { errorMessage: redacted.errorMessage } : {}),
-        },
-    )
-}
-
-function redactPersistedErrorMessage({
-    message,
-    manifest,
-}: RedactPersistedErrorMessageParams): string {
-    if (manifest.input.length === 0 && manifest.output.length === 0) {
-        return message
-    }
-    const parsed = tryParseFriendlyPieceError(message)
-    if (isNil(parsed)) {
-        return message
-    }
-    const paths = [...new Set([...manifest.input, ...manifest.output])]
-    return JSON.stringify(sensitivityUtils.redactFriendlyPieceError({
-        error: parsed,
-        paths,
-    }))
-}
 
 async function buildManifestForAction({
     action,
@@ -75,11 +29,11 @@ async function buildManifestForAction({
                 actionName: pieceAction.settings.actionName,
                 devPieces,
             })
-            return sensitivityUtils.buildSensitivityManifest({
+            return pieceSensitivityUtils.buildManifestFromComponent({
                 sensitiveFields: pieceAction.settings.sensitiveFields,
-                inputProperties: pieceSensitivityUtils.piecePropertyMapToSnapshots(pieceStep.props),
-                outputSchemaFields: pieceSensitivityUtils.outputSchemaToFieldSnapshots(pieceStep.outputSchema),
-                includeAuthField: pieceStep.requireAuth,
+                props: pieceStep.props,
+                outputSchema: pieceStep.outputSchema,
+                requireAuth: pieceStep.requireAuth,
             })
         }
         case FlowActionType.CODE:
@@ -112,29 +66,17 @@ async function buildManifestForTrigger({
         triggerName: pieceTrigger.settings.triggerName,
         devPieces,
     })
-    return sensitivityUtils.buildSensitivityManifest({
+    return pieceSensitivityUtils.buildManifestFromComponent({
         sensitiveFields: pieceTrigger.settings.sensitiveFields,
-        inputProperties: pieceSensitivityUtils.piecePropertyMapToSnapshots(pieceStep.props),
-        outputSchemaFields: pieceSensitivityUtils.outputSchemaToFieldSnapshots(pieceStep.outputSchema),
-        includeAuthField: pieceStep.requireAuth,
+        props: pieceStep.props,
+        outputSchema: pieceStep.outputSchema,
+        requireAuth: pieceStep.requireAuth,
     })
 }
 
 export const engineSensitivityHelper = {
-    applySensitivityRedaction,
     buildManifestForAction,
     buildManifestForTrigger,
-    redactPersistedErrorMessage,
-}
-
-type ApplySensitivityRedactionParams<T extends BaseStepOutput> = {
-    stepOutput: T
-    manifest: SensitivityManifest
-}
-
-type RedactPersistedErrorMessageParams = {
-    message: string
-    manifest: SensitivityManifest
 }
 
 type BuildManifestForActionParams = {

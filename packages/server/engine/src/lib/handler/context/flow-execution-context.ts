@@ -16,13 +16,13 @@ import {
     LoopStepResult,
     RespondResponse,
     SensitivityManifest,
+    sensitivityUtils,
     StepOutput,
     StepOutputStatus,
     StepOutputType,
 } from '@activepieces/shared'
 import { engineFileApi } from '../../engine-file-api'
 import { loggingUtils } from '../../helper/logging-utils'
-import { engineSensitivityHelper } from '../../helper/engine-sensitivity-helper'
 import { utils } from '../../utils'
 import { StepExecutionPath } from './step-execution-path'
 
@@ -140,7 +140,7 @@ export class FlowExecutorContext {
         const manifest = this.getStepSensitivityManifest(stepName)
         const redacted = stepOutput.outputType === StepOutputType.SLICE
             ? stepOutput
-            : engineSensitivityHelper.applySensitivityRedaction({ stepOutput, manifest })
+            : sensitivityUtils.applyStepOutputRedaction({ stepOutput, manifest })
         const truncated = withTruncatedInput(redacted)
         let finalized: BaseStepOutput
         if (truncated.type === FlowActionType.LOOP_ON_ITEMS) {

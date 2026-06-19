@@ -1,5 +1,5 @@
 import { ActionContext, backwardCompatabilityContextUtils, ConstructToolParams, CreateWaitpointHook, CreateWaitpointParams, CreateWaitpointResult, InputPropertyMap, PieceAuthProperty, PiecePropertyMap, RespondHook, RespondHookParams, StaticPropsValue, StopHook, StopHookParams, TagsManager, WaitForWaitpointHook } from '@activepieces/pieces-framework'
-import { AUTHENTICATION_PROPERTY_NAME, EngineGenericError, ExecutionType, FlowActionType, FlowRunStatus, GenericStepOutput, isNil, PausedFlowTimeoutError, PieceAction, RespondResponse, StepOutputStatus } from '@activepieces/shared'
+import { AUTHENTICATION_PROPERTY_NAME, EngineGenericError, ExecutionType, FlowActionType, FlowRunStatus, GenericStepOutput, isNil, PausedFlowTimeoutError, PieceAction, RespondResponse, sensitivityUtils, StepOutputStatus } from '@activepieces/shared'
 import type { ToolSet } from 'ai'
 import dayjs from 'dayjs'
 import { continueIfFailureHandler, runWithExponentialBackoff } from '../helper/error-handling'
@@ -200,7 +200,7 @@ const executeAction: ActionHandler<PieceAction> = async ({ action, executionStat
 
     if (executionStateError) {
         const sensitivityManifest = executionState.getStepSensitivityManifest(action.name)
-        const errorMessage = engineSensitivityHelper.redactPersistedErrorMessage({
+        const errorMessage = sensitivityUtils.redactPersistedErrorMessage({
             message: utils.formatError(executionStateError),
             manifest: sensitivityManifest,
         })

@@ -159,9 +159,12 @@ function collectInputPropertyPaths({
             continue
         }
         if (!isNil(property.properties) && property.properties.length > 0) {
+            const nestedPrefix = property.type === 'ARRAY'
+                ? `${propertyPath}[]`
+                : propertyPath
             paths.push(...collectInputPropertyPaths({
                 properties: property.properties,
-                prefix: propertyPath,
+                prefix: nestedPrefix,
             }))
         }
     }
@@ -215,16 +218,78 @@ function redactStepOutput({
         })
     }
     if ('errorMessage' in stepOutput && !isNil(stepOutput['errorMessage'])) {
-        const errorPaths = uniquePaths([...manifest.input, ...manifest.output])
-        const parsed = tryParseFriendlyPieceError(stepOutput['errorMessage'])
-        if (!isNil(parsed)) {
-            redacted['errorMessage'] = JSON.stringify(redactFriendlyPieceError({
-                error: parsed,
-                paths: errorPaths,
-            }))
-        }
+        redacted['errorMessage'] = redactPersistedErrorMessage({
+            message: stepOutput['errorMessage'],
+            manifest,
+        })
     }
     return redacted
+}
+
+function tryParseJsonObject(value: string): Record<string, unknown> | undefined {
+    try {
+        const parsed: unknown = JSON.parse(value)
+        if (isObjectRecord(parsed)) {
+            return parsed
+        }
+    }
+    catch {
+        return undefined
+    }
+    return undefined
+}
+
+function redactPersistedErrorMessage({
+    message,
+    manifest,
+}: RedactPersistedErrorMessageParams): string {
+    if (manifest.input.length === 0 && manifest.output.length === 0) {
+        return message
+    }
+    const errorPaths = uniquePaths([...manifest.input, ...manifest.output])
+    const parsed = tryParseFriendlyPieceError(message)
+    if (!isNil(parsed)) {
+        return JSON.stringify(redactFriendlyPieceError({
+            error: parsed,
+            paths: errorPaths,
+        }))
+    }
+    const jsonObject = tryParseJsonObject(message)
+    if (!isNil(jsonObject)) {
+        return JSON.stringify(redactValue({
+            value: jsonObject,
+            paths: errorPaths,
+        }))
+    }
+    return message
+}
+
+function applyStepOutputRedaction<T extends PersistedStepOutputShape>({
+    stepOutput,
+    manifest,
+}: ApplyStepOutputRedactionParams<T>): T {
+    const redacted = redactStepOutput({ stepOutput, manifest })
+    return {
+        ...stepOutput,
+        input: redacted.input,
+        output: redacted.output,
+        ...(!isNil(redacted.errorMessage) ? { errorMessage: redacted.errorMessage } : {}),
+    }
+}
+
+function redactSampleData({
+    payload,
+    manifest,
+    type,
+}: RedactSampleDataParams): unknown {
+    if (manifest.input.length === 0 && manifest.output.length === 0) {
+        return payload
+    }
+    const paths = type === 'input' ? manifest.input : manifest.output
+    if (paths.length === 0) {
+        return payload
+    }
+    return redactValue({ value: payload, paths })
 }
 
 function redactFriendlyPieceError({
@@ -261,10 +326,13 @@ function isSensitiveInputPropertyType(propertyType: string): boolean {
 }
 
 export const sensitivityUtils = {
+    applyStepOutputRedaction,
     buildSensitivityManifest,
     redactValue,
     redactStepOutput,
     redactFriendlyPieceError,
+    redactPersistedErrorMessage,
+    redactSampleData,
     isSensitiveInputPropertyType,
     parsePathSegments,
 }
@@ -320,11 +388,37 @@ type RedactFriendlyPieceErrorParams = {
     paths: readonly string[]
 }
 
+type PersistedStepOutputShape = {
+    input: unknown
+    output?: unknown
+    errorMessage?: string
+}
+
+type ApplyStepOutputRedactionParams<T extends PersistedStepOutputShape> = {
+    stepOutput: T
+    manifest: SensitivityManifest
+}
+
+type RedactPersistedErrorMessageParams = {
+    message: string
+    manifest: SensitivityManifest
+}
+
+type RedactSampleDataParams = {
+    payload: unknown
+    manifest: SensitivityManifest
+    type: 'input' | 'output'
+}
+
 export type {
+    ApplyStepOutputRedactionParams,
     BuildSensitivityManifestParams,
     OutputSchemaFieldSnapshot,
     PiecePropertySnapshot,
+    PersistedStepOutputShape,
     RedactFriendlyPieceErrorParams,
+    RedactPersistedErrorMessageParams,
+    RedactSampleDataParams,
     RedactStepOutputParams,
     RedactValueParams,
 }
