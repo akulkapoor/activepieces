@@ -169,4 +169,51 @@ describe('sensitivityUtils.redactExecutionSteps', () => {
         expect(redacted['step_1']?.input).toEqual({ apiKey: SENSITIVE_VALUE_PLACEHOLDER })
         expect(redacted['step_1']?.output).toEqual({ access_token: SENSITIVE_VALUE_PLACEHOLDER })
     })
+
+    it('redacts sensitive fields on loop output metadata and nested iterations', () => {
+        const steps = {
+            loop_1: {
+                type: FlowActionType.LOOP_ON_ITEMS,
+                status: StepOutputStatus.SUCCEEDED,
+                input: {},
+                output: {
+                    item: { secret: 'loop-item-secret', name: 'Acme' },
+                    index: 0,
+                    iterations: [
+                        {
+                            child_1: {
+                                type: FlowActionType.CODE,
+                                status: StepOutputStatus.SUCCEEDED,
+                                input: {},
+                                output: { token: 'child-token' },
+                            },
+                        },
+                    ],
+                },
+            },
+        }
+
+        const redacted = sensitivityUtils.redactExecutionSteps({
+            steps,
+            stepSensitivityManifests: {
+                loop_1: { input: [], output: ['item.secret'] },
+                child_1: { input: [], output: ['token'] },
+            },
+        })
+
+        expect(redacted['loop_1']?.output).toEqual({
+            item: { secret: SENSITIVE_VALUE_PLACEHOLDER, name: 'Acme' },
+            index: 0,
+            iterations: [
+                {
+                    child_1: {
+                        type: FlowActionType.CODE,
+                        status: StepOutputStatus.SUCCEEDED,
+                        input: {},
+                        output: { token: SENSITIVE_VALUE_PLACEHOLDER },
+                    },
+                },
+            ],
+        })
+    })
 })

@@ -342,6 +342,7 @@ function redactExecutionStep({
         const redactedIterations = loopOutput.iterations.map((iteration) =>
             redactExecutionSteps({ steps: iteration, stepSensitivityManifests }),
         )
+        const redactedOutputFields = isObjectRecord(redactedBase.output) ? redactedBase.output : {}
         return Object.assign(
             Object.create(Object.getPrototypeOf(step)),
             step,
@@ -350,6 +351,7 @@ function redactExecutionStep({
                 errorMessage: redactedBase.errorMessage,
                 output: {
                     ...loopOutput,
+                    ...redactedOutputFields,
                     iterations: redactedIterations,
                 },
             },

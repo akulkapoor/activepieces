@@ -159,7 +159,11 @@ async function getFlowExecutionState(input: ResolvedExecuteFlowOperation, consta
             }
         }
     }
-    return flowContext
+    return attachSensitivityManifestsForExecutedSteps({
+        flowContext,
+        flowVersion: input.flowVersion,
+        devPieces: constants.devPieces,
+    })
 }
 
 async function runOrReturnPayload(input: ResolvedBeginExecuteFlowOperation, constants: EngineConstants): Promise<TriggerPayload> {
@@ -201,6 +205,26 @@ async function insertSuccessStepsOrPausedRecursively({ stepOutput, isWaitpointRe
         return loopOutput.setIterations(newIterations)
     }
     return stepOutput
+}
+
+async function attachSensitivityManifestsForExecutedSteps({
+    flowContext,
+    flowVersion,
+    devPieces,
+}: AttachSensitivityManifestsParams): Promise<FlowExecutorContext> {
+    let next = flowContext
+    const candidateSteps = [flowVersion.trigger, ...flowStructureUtil.getAllSteps(flowVersion.trigger)]
+    for (const step of candidateSteps) {
+        if (isNil(next.getStepOutput(step.name))) {
+            continue
+        }
+        const sensitivityManifest = await engineSensitivityHelper.buildManifestForStep({
+            step,
+            devPieces,
+        })
+        next = next.withStepSensitivityManifest(step.name, sensitivityManifest)
+    }
+    return next
 }
 
 async function resolveExecuteFlowOperation(operation: ExecuteFlowOperation): Promise<ResolvedExecuteFlowOperation> {
@@ -270,4 +294,10 @@ type IsStepRestorableParams = {
 type InsertStepsParams = {
     stepOutput: StepOutput
     isWaitpointResume: boolean
+}
+
+type AttachSensitivityManifestsParams = {
+    flowContext: FlowExecutorContext
+    flowVersion: ResolvedExecuteFlowOperation['flowVersion']
+    devPieces: string[]
 }
