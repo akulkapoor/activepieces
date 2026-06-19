@@ -16,7 +16,6 @@ import {
     LoopStepOutput,
     ResumePayload,
     ResumeReason,
-    sensitivityUtils,
     StepOutput,
     StepOutputStatus,
     TriggerHookType,
@@ -28,7 +27,6 @@ import { EngineConstants, ResolvedBeginExecuteFlowOperation, ResolvedExecuteFlow
 import { FlowExecutorContext } from '../handler/context/flow-execution-context'
 import { testExecutionContext } from '../handler/context/test-execution-context'
 import { flowExecutor } from '../handler/flow-executor'
-import { engineSensitivityHelper } from '../helper/engine-sensitivity-helper'
 import { flowRunProgressReporter } from '../helper/flow-run-progress-reporter'
 import { triggerHelper } from '../helper/trigger-helper'
 import { utils } from '../utils'
@@ -100,30 +98,21 @@ async function resolveStateOrThrowOnNonUserError({ input, constants, baseContext
         return executionState
     }
     if (error instanceof ExecutionError && error.type === ExecutionErrorType.USER) {
-        return buildFailedTriggerContext({ input, baseContext, error, constants })
+        return buildFailedTriggerContext({ input, baseContext, error })
     }
     throw error
 }
 
-async function buildFailedTriggerContext({ input, baseContext, error, constants }: BuildFailedTriggerContextParams): Promise<FlowExecutorContext> {
+async function buildFailedTriggerContext({ input, baseContext, error }: BuildFailedTriggerContextParams): Promise<FlowExecutorContext> {
     const trigger = input.flowVersion.trigger
-    const sensitivityManifest = await engineSensitivityHelper.buildManifestForStep({
-        step: trigger,
-        devPieces: constants.devPieces,
-    })
-    const message = sensitivityUtils.redactPersistedErrorMessage({
-        message: utils.formatExecutionError(error),
-        manifest: sensitivityManifest,
-    })
+    const message = utils.formatExecutionError(error)
     const triggerPayload = input.executionType === ExecutionType.BEGIN ? input.triggerPayload : undefined
     const failedTriggerOutput = GenericStepOutput.create({
         type: trigger.type,
         status: StepOutputStatus.FAILED,
         input: {},
     }).setOutput(triggerPayload ?? {}).setErrorMessage(message)
-    return (await baseContext
-        .withStepSensitivityManifest(trigger.name, sensitivityManifest)
-        .upsertStep(trigger.name, failedTriggerOutput)).setVerdict({
+    return (await baseContext.upsertStep(trigger.name, failedTriggerOutput)).setVerdict({
         status: FlowRunStatus.FAILED,
         failedStep: {
             name: trigger.name,
@@ -136,18 +125,12 @@ async function buildFailedTriggerContext({ input, baseContext, error, constants 
 async function getFlowExecutionState(input: ResolvedExecuteFlowOperation, constants: EngineConstants, flowContext: FlowExecutorContext): Promise<FlowExecutorContext> {
     if (input.executionType === ExecutionType.BEGIN) {
         const newPayload = await runOrReturnPayload(input, constants)
-        const sensitivityManifest = await engineSensitivityHelper.buildManifestForStep({
-            step: input.flowVersion.trigger,
-            devPieces: constants.devPieces,
-        })
-        return flowContext
-            .withStepSensitivityManifest(input.flowVersion.trigger.name, sensitivityManifest)
-            .upsertStep(input.flowVersion.trigger.name,
-                GenericStepOutput.create({
-                    type: input.flowVersion.trigger.type,
-                    status: StepOutputStatus.SUCCEEDED,
-                    input: {},
-                }).setOutput(newPayload))
+        return flowContext.upsertStep(input.flowVersion.trigger.name,
+            GenericStepOutput.create({
+                type: input.flowVersion.trigger.type,
+                status: StepOutputStatus.SUCCEEDED,
+                input: {},
+            }).setOutput(newPayload))
     }
     flowContext = flowContext.addTags(input.executionState.tags)
     const isWaitpointResume = input.resumeReason === ResumeReason.WAITPOINT
@@ -259,7 +242,6 @@ type BuildFailedTriggerContextParams = {
     input: ResolvedExecuteFlowOperation
     baseContext: FlowExecutorContext
     error: ExecutionError
-    constants: EngineConstants
 }
 
 type IsStepRestorableParams = {

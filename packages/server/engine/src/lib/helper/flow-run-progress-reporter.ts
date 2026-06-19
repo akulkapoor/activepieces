@@ -2,7 +2,7 @@ import { promisify } from 'node:util'
 import { zstdCompress as zstdCompressCallback } from 'node:zlib'
 import { setTimeout } from 'timers/promises'
 import { OutputContext } from '@activepieces/pieces-framework'
-import { DEFAULT_MCP_DATA, EngineGenericError, FileCompression, FileType, FlowActionType, GenericStepOutput, isFlowRunStateTerminal, isNil, logSerializer, RunEnvironment, sensitivityUtils, StepOutputStatus, StepRunResponse, tryCatch, UpdateRunProgressRequest, UploadRunLogsRequest } from '@activepieces/shared'
+import { DEFAULT_MCP_DATA, EngineGenericError, FileCompression, FileType, FlowActionType, GenericStepOutput, isFlowRunStateTerminal, isNil, logSerializer, RunEnvironment, StepOutputStatus, StepRunResponse, tryCatch, UpdateRunProgressRequest, UploadRunLogsRequest } from '@activepieces/shared'
 import { Mutex } from 'async-mutex'
 import dayjs from 'dayjs'
 import { engineFileApi } from '../engine-file-api'
@@ -43,13 +43,11 @@ export const flowRunProgressReporter = {
             if (isNil(step)) {
                 return
             }
-            const manifest = flowExecutorContext.getStepSensitivityManifest(stepNameToUpdate)
-            const redactedStep = sensitivityUtils.applyStepOutputRedaction({ stepOutput: step, manifest })
             await sendUpdateProgress({
                 step: {
                     name: stepNameToUpdate,
                     path: flowExecutorContext.currentPath.path,
-                    output: redactedStep,
+                    output: step,
                 },
                 flowRun: {
                     projectId: engineConstants.projectId,
@@ -72,11 +70,6 @@ export const flowRunProgressReporter = {
         const { engineConstants, flowExecutorContext, stepName, stepOutput } = params
         return {
             update: async (params: { data: unknown }) => {
-                const manifest = flowExecutorContext.getStepSensitivityManifest(stepName)
-                const redactedOutput = sensitivityUtils.redactValue({
-                    value: params.data,
-                    paths: manifest.output,
-                })
                 const updated = await flowExecutorContext
                     .upsertStep(stepName, stepOutput.setOutput(params.data))
 
@@ -90,7 +83,7 @@ export const flowRunProgressReporter = {
                         projectId: engineConstants.projectId,
                         stepResponse: {
                             ...stepResponse,
-                            output: redactedOutput,
+                            output: params.data,
                         },
                     })
                 }
@@ -112,7 +105,7 @@ export const flowRunProgressReporter = {
 
             const serialized = await logSerializer.serialize({
                 executionState: {
-                    steps: flowExecutorContext.getRedactedStepsForPersistence(),
+                    steps: flowExecutorContext.steps,
                     tags: Array.from(flowExecutorContext.tags),
                 },
             })
@@ -214,15 +207,13 @@ const extractStepResponse = (params: ExtractStepResponse): StepRunResponse | und
     if (isNil(stepOutput)) {
         return undefined
     }
-    const manifest = params.flowExecutorContext.getStepSensitivityManifest(params.stepName)
-    const redactedStep = sensitivityUtils.applyStepOutputRedaction({ stepOutput, manifest })
-    const isSuccess = redactedStep.status === StepOutputStatus.SUCCEEDED || redactedStep.status === StepOutputStatus.PAUSED
+    const isSuccess = stepOutput.status === StepOutputStatus.SUCCEEDED || stepOutput.status === StepOutputStatus.PAUSED
     return {
         runId: params.runId,
         success: isSuccess,
-        input: redactedStep.input,
-        output: redactedStep.output,
-        standardError: isSuccess ? '' : (redactedStep.errorMessage as string),
+        input: stepOutput.input,
+        output: stepOutput.output,
+        standardError: isSuccess ? '' : (stepOutput.errorMessage as string),
         standardOutput: '',
     }
 }

@@ -1,5 +1,5 @@
 import { ContextVersion } from '@activepieces/pieces-framework'
-import { applyFunctionToValues, extractMustacheTokens, FormulaEvaluationError, formulaEvaluator, isNil, isString, SENSITIVE_VALUE_PLACEHOLDER } from '@activepieces/shared'
+import { applyFunctionToValues, extractMustacheTokens, FormulaEvaluationError, formulaEvaluator, isNil, isString } from '@activepieces/shared'
 
 import { initCodeSandbox } from '../core/code/code-sandbox'
 import { FlowExecutorContext } from '../handler/context/flow-execution-context'
@@ -179,7 +179,7 @@ async function handleVariable(params: ResolveSingleTokenParams): Promise<unknown
         return ''
     }
     if (censoredInput) {
-        return SENSITIVE_VALUE_PLACEHOLDER
+        return '**REDACTED**'
     }
     return createVariableResolver({ engineToken, projectId, apiUrl }).obtain(name)
 }
@@ -202,7 +202,7 @@ async function handleConnection(params: ResolveSingleTokenParams): Promise<unkno
         return ''
     }
     if (censoredInput) {
-        return SENSITIVE_VALUE_PLACEHOLDER
+        return '**REDACTED**'
     }
     const connection = await createConnectionResolver({ engineToken, projectId, apiUrl, contextVersion: params.contextVersion }).obtain(connectionName)
     const pathAfterConnectionName = parsePathAfterConnectionName(variableName, connectionName)
