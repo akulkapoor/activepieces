@@ -26,6 +26,9 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { formUtils } from '@/features/pieces';
+import { SensitiveFieldToggle } from '@/features/sensitivity/components/sensitive-field-toggle';
+import { useSensitiveFieldsFormEnabled } from '@/features/sensitivity/context/sensitive-fields-form-context';
+import { sensitiveFieldsFormUtils } from '@/features/sensitivity/utils/sensitive-fields-form-utils';
 import { cn } from '@/lib/utils';
 
 import { ArrayPiecePropertyInInlineItemMode } from './array-property-in-inline-item-mode';
@@ -45,9 +48,19 @@ function AutoFormFieldWrapper({
   //we have to pass this prop, because props inside custom auth can be secret text, which means their labels will become (Connection)
   isForConnectionSelect = false,
 }: AutoFormFieldWrapperProps) {
+  const sensitiveFieldsFormEnabled = useSensitiveFieldsFormEnabled();
   const isArrayProperty =
     !isPieceAuthProperty(property) && property.type === PropertyType.ARRAY;
   const isAuthProperty = isForConnectionSelect || Array.isArray(property);
+  const schemaSensitiveInput =
+    !isAuthProperty &&
+    !Array.isArray(property) &&
+    sensitiveFieldsFormUtils.isSchemaSensitiveInputProperty(property.type);
+  const canShowSensitiveInputToggle =
+    sensitiveFieldsFormEnabled &&
+    !isAuthProperty &&
+    !Array.isArray(property) &&
+    sensitiveFieldsFormUtils.shouldShowInputSensitiveToggle(property.type);
   return (
     <AutoFormFielWrapperErrorBoundary
       field={field}
@@ -71,6 +84,14 @@ function AutoFormFieldWrapper({
             )}
 
             <span className="grow"></span>
+            {canShowSensitiveInputToggle && (
+              <SensitiveFieldToggle
+                path={propertyName}
+                side="input"
+                schemaLocked={schemaSensitiveInput}
+                disabled={disabled}
+              />
+            )}
             {allowDynamicValues && (
               <DynamicValueToggle
                 propertyName={propertyName}

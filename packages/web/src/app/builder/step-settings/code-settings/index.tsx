@@ -11,6 +11,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { SensitiveCodeFieldsSection } from '@/features/sensitivity/components/sensitive-code-fields-section';
 
 import { TextInputWithMentions } from '../../piece-properties/text-input-with-mentions';
 
@@ -32,6 +33,7 @@ type CodeSettingsProps = {
 
 const CodeSettings = React.memo(({ readonly }: CodeSettingsProps) => {
   const form = useFormContext<CodeAction>();
+  const inputKeys = Object.keys(form.watch('settings.input') ?? {});
 
   return (
     <div className="flex flex-col gap-4">
@@ -85,6 +87,7 @@ const CodeSettings = React.memo(({ readonly }: CodeSettingsProps) => {
           </FormItem>
         )}
       />
+      <SensitiveCodeFieldsSection inputKeys={inputKeys} disabled={readonly} />
     </div>
   );
 });
