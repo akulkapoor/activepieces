@@ -20,7 +20,7 @@ export const apGetRunTool = (mcp: ProjectScopedMcpServer, log: FastifyBaseLogger
             try {
                 const { flowRunId } = getRunInput.parse(args)
 
-                const run = await flowRunService(log).getOnePopulatedOrThrow({
+                const run = await flowRunService(log).getOnePopulatedForDisplayOrThrow({
                     id: flowRunId,
                     projectId: mcp.projectId,
                 })

@@ -350,7 +350,7 @@ export async function pollForRunCompletion(log: FastifyBaseLogger, runId: string
         }
         await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS))
     }
-    return flowRunService(log).getOnePopulatedOrThrow({ id: runId, projectId })
+    return flowRunService(log).getOnePopulatedForDisplayOrThrow({ id: runId, projectId })
 }
 
 export function formatRunResult(run: FlowRun): string {

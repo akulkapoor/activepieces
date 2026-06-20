@@ -5,6 +5,7 @@ import {
     Cursor,
     ErrorCode,
     ExecuteFlowJobData,
+    ExecutionState,
     ExecutionType,
     ExecutioOutputFile,
     FileType,
@@ -49,6 +50,7 @@ import { jobQueue, JobType } from '../../workers/job-queue/job-queue'
 import { payloadOffloader } from '../../workers/payload-offloader'
 import { flowService } from '../flow/flow.service'
 import { flowVersionService } from '../flow-version/flow-version.service'
+import { apiSensitivityHelper } from '../helper/api-sensitivity-helper'
 import { sampleDataService } from '../step-run/sample-data.service'
 import { FlowRunEntity } from './flow-run-entity'
 import { flowRunSideEffects } from './flow-run-side-effects'
@@ -423,11 +425,11 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
         return flowRun
     },
     async getStepsOrNull({ flowRun }: { flowRun: FlowRun }): Promise<Record<string, StepOutput> | null> {
-        if (isNil(flowRun.logsFileId)) {
+        const { steps, executionState } = await loadExecutionStateFromRun({ flowRun, log })
+        if (isNil(executionState)) {
             return null
         }
-        const stateFile = await readLogsFile(log, flowRun.logsFileId, flowRun.projectId)
-        return stateFile?.executionState.steps ?? null
+        return steps
     },
     async countByStatus(params: CountByStatusParams): Promise<FlowRunCountByStatus[]> {
         let query = flowRunRepo().createQueryBuilder('flow_run')
@@ -452,18 +454,37 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
     },
     async getOnePopulatedOrThrow(params: GetOneParams): Promise<FlowRun> {
         const flowRun = await this.getOneOrThrow(params)
-        let steps = {}
-        let internalError: RunInternalError | undefined = undefined
-        if (!isNil(flowRun.logsFileId)) {
-            const stateFile = await readLogsFile(log, flowRun.logsFileId, flowRun.projectId)
-            if (!isNil(stateFile)) {
-                steps = stateFile.executionState.steps
-                internalError = stateFile.internalError
-            }
-        }
+        const { steps, internalError } = await loadExecutionStateFromRun({ flowRun, log })
         return {
             ...flowRun,
             steps,
+            internalError,
+        }
+    },
+    async getOnePopulatedForDisplayOrThrow(params: GetOneParams): Promise<FlowRun> {
+        const flowRun = await this.getOneOrThrow(params)
+        const { steps, internalError, executionState } = await loadExecutionStateFromRun({ flowRun, log })
+        if (isNil(executionState)) {
+            return {
+                ...flowRun,
+                steps,
+                internalError,
+            }
+        }
+        const platformId = await projectService(log).getPlatformId(flowRun.projectId)
+        const flowVersion = await flowVersionService(log).getOneOrThrow(flowRun.flowVersionId)
+        const stepSensitivityManifests = await apiSensitivityHelper.resolveManifestsForExecutionState({
+            executionState,
+            flowVersion,
+            platformId,
+            log,
+        })
+        return {
+            ...flowRun,
+            steps: apiSensitivityHelper.redactExecutionStepsForDisplay({
+                executionState,
+                stepSensitivityManifests,
+            }),
             internalError,
         }
     },
@@ -674,6 +695,24 @@ async function resolveStepOutput({ step, flowRun, log }: ResolveStepOutputParams
     return JSON.parse(file.data.toString('utf-8'))
 }
 
+async function loadExecutionStateFromRun({
+    flowRun,
+    log,
+}: LoadExecutionStateFromRunParams): Promise<LoadedExecutionState> {
+    if (isNil(flowRun.logsFileId)) {
+        return { steps: {}, internalError: undefined, executionState: undefined }
+    }
+    const stateFile = await readLogsFile(log, flowRun.logsFileId, flowRun.projectId)
+    if (isNil(stateFile)) {
+        return { steps: {}, internalError: undefined, executionState: undefined }
+    }
+    return {
+        steps: stateFile.executionState.steps,
+        internalError: stateFile.internalError,
+        executionState: stateFile.executionState,
+    }
+}
+
 async function readLogsFile(log: FastifyBaseLogger, logsFileId: string, projectId: string): Promise<ExecutioOutputFile | null> {
     const result = await fileService(log).getDataOrUndefined({
         projectId,
@@ -853,6 +892,17 @@ type CountByStatusParams = {
     projectId: ProjectId
     createdAfter?: string
     createdBefore?: string
+}
+
+type LoadedExecutionState = {
+    steps: Record<string, StepOutput>
+    internalError: RunInternalError | undefined
+    executionState: ExecutionState | undefined
+}
+
+type LoadExecutionStateFromRunParams = {
+    flowRun: FlowRun
+    log: FastifyBaseLogger
 }
 
 type FilterFlowRunsAndApplyFiltersParams = {

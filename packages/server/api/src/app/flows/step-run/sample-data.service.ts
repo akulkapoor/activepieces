@@ -15,12 +15,16 @@ import {
     SampleDataFileType,
     SampleDataSettings,
     SaveSampleDataResponse,
+    sensitivityUtils,
     Step,
-    stringifyNullOrUndefined } from '@activepieces/shared'
+    stringifyNullOrUndefined,
+} from '@activepieces/shared'
 import dayjs from 'dayjs'
 import { FastifyBaseLogger } from 'fastify'
 import { fileRepo, fileService } from '../../file/file.service'
+import { projectService } from '../../project/project-service'
 import { flowVersionService } from '../flow-version/flow-version.service'
+import { apiSensitivityHelper } from '../helper/api-sensitivity-helper'
 export const sampleDataService = (log: FastifyBaseLogger) => ({
     async saveSampleDataFileIdsInStep(params: SaveSampleDataParams): Promise<SampleDataSettings> {
         const flowVersion = await flowVersionService(log).getOneOrThrow(params.flowVersionId)
@@ -54,7 +58,14 @@ export const sampleDataService = (log: FastifyBaseLogger) => ({
                 return response.data.toString('utf-8')
             }
             const decodedData = new TextDecoder('utf-8').decode(response.data)
-            return JSON.parse(decodedData)
+            const parsedData = JSON.parse(decodedData)
+            return redactSampleDataPayload({
+                step,
+                payload: parsedData,
+                type: params.type,
+                projectId: params.projectId,
+                log,
+            })
         }
         return undefined
 
@@ -97,9 +108,16 @@ export async function saveSampleData({
 }: SaveSampleDataParams, log: FastifyBaseLogger): Promise<SaveSampleDataResponse> {
     const flowVersion = await flowVersionService(log).getOneOrThrow(flowVersionId)
     const step = flowStructureUtil.getStepOrThrow(stepName, flowVersion.trigger)
+    const redactedPayload = await redactSampleDataPayload({
+        step,
+        payload,
+        type,
+        projectId,
+        log,
+    })
     const fileType = type === SampleDataFileType.INPUT ? FileType.SAMPLE_DATA_INPUT : FileType.SAMPLE_DATA
     const fileId = await useExistingOrCreateNewSampleId(projectId, flowVersion, step, fileType, log)
-    const payloadWithStringifiedNullOrUndefined = isNil(payload) ? stringifyNullOrUndefined(payload) : payload
+    const payloadWithStringifiedNullOrUndefined = isNil(redactedPayload) ? stringifyNullOrUndefined(redactedPayload) : redactedPayload
     const data = typeof payloadWithStringifiedNullOrUndefined === 'string' ? Buffer.from(payloadWithStringifiedNullOrUndefined) : Buffer.from(JSON.stringify(payloadWithStringifiedNullOrUndefined))
     return fileService(log).save({
         projectId,
@@ -134,6 +152,26 @@ async function useExistingOrCreateNewSampleId(projectId: ProjectId, flowVersion:
     return file.id
 }
 
+async function redactSampleDataPayload({
+    step,
+    payload,
+    type,
+    projectId,
+    log,
+}: RedactSampleDataPayloadParams): Promise<unknown> {
+    const platformId = await projectService(log).getPlatformId(projectId)
+    const manifest = await apiSensitivityHelper.buildManifestForStep({
+        step,
+        platformId,
+        log,
+    })
+    return sensitivityUtils.redactSampleData({
+        payload,
+        manifest,
+        type: type === SampleDataFileType.INPUT ? 'input' : 'output',
+    })
+}
+
 
 type DeleteSampleDataForStepParams = {
     projectId: ProjectId
@@ -162,4 +200,12 @@ type SaveSampleDataParams = {
     stepName: string
     payload: unknown
     type: SampleDataFileType
+}
+
+type RedactSampleDataPayloadParams = {
+    step: Step
+    payload: unknown
+    type: SampleDataFileType
+    projectId: ProjectId
+    log: FastifyBaseLogger
 }
