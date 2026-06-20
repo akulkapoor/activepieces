@@ -1,14 +1,18 @@
+import {
+	AuthenticationType,
+	HttpMethod,
+	httpClient,
+} from '@activepieces/pieces-common';
 import { DropdownOption, Property } from '@activepieces/pieces-framework';
-import { google, drive_v3 } from 'googleapis';
+import { isNil, isString } from '@activepieces/shared';
 import {
 	columnToLabel,
-	createGoogleClient,
+	getAccessToken,
 	getHeaderRow,
 	googleSheetsAuth,
 	GoogleSheetsAuthValue,
 	googleSheetsCommon,
 } from './common';
-import { isNil } from '@activepieces/shared';
 
 const createEmptyOptionList = (message: string) => {
 	return {
@@ -38,41 +42,52 @@ export const spreadsheetIdProp = (displayName: string, description: string, requ
 				return createEmptyOptionList('please connect your account first.');
 			}
 
-			const authValue = auth;
-
-			const authClient = await createGoogleClient(authValue);
-
-			const drive = google.drive({ version: 'v3', auth: authClient });
-
 			const q = ["mimeType='application/vnd.google-apps.spreadsheet'", 'trashed = false'];
 
 			if (searchValue) {
 				q.push(`name contains '${searchValue}'`);
 			}
 
-			let nextPageToken;
+			let nextPageToken: string | undefined;
 			const options: DropdownOption<string>[] = [];
+			const token = await getAccessToken(auth);
+
 			do {
-				const response: any = await drive.files.list({
+				const queryParams: Record<string, string> = {
 					q: q.join(' and '),
-					pageToken: nextPageToken,
 					orderBy: 'createdTime desc',
 					fields: 'nextPageToken, files(id, name)',
-					supportsAllDrives: true,
-					includeItemsFromAllDrives: includeTeamDrives ? true : false,
+					supportsAllDrives: 'true',
+					includeItemsFromAllDrives: includeTeamDrives ? 'true' : 'false',
 					corpora: includeTeamDrives ? 'allDrives' : 'user',
-				});
-				const fileList: drive_v3.Schema$FileList = response.data;
-
-				if (fileList.files) {
-					for (const file of fileList.files) {
-						options.push({
-							label: file.name!,
-							value: file.id!,
-						});
-					}
+				};
+				if (nextPageToken) {
+					queryParams.pageToken = nextPageToken;
 				}
-				nextPageToken = response.data.nextPageToken;
+
+				const response = await httpClient.sendRequest<{
+					files?: { id?: string | null; name?: string | null }[];
+					nextPageToken?: string;
+				}>({
+					method: HttpMethod.GET,
+					url: 'https://www.googleapis.com/drive/v3/files',
+					queryParams,
+					authentication: {
+						type: AuthenticationType.BEARER_TOKEN,
+						token,
+					},
+				});
+
+				for (const file of response.body.files ?? []) {
+					if (isNil(file.id) || isNil(file.name)) {
+						continue;
+					}
+					options.push({
+						label: file.name,
+						value: file.id,
+					});
+				}
+				nextPageToken = response.body.nextPageToken;
 			} while (nextPageToken);
 
 			return {
@@ -94,21 +109,25 @@ export const sheetIdProp = (displayName: string, description: string, required =
 				return createEmptyOptionList('please connect your account first.');
 			}
 
-			if ((spreadsheetId ?? '').toString().length === 0) {
+			if (!isString(spreadsheetId) || spreadsheetId.length === 0) {
 				return createEmptyOptionList('please select a spreadsheet first.');
 			}
 
 			const authValue = auth as GoogleSheetsAuthValue;
+			const token = await getAccessToken(authValue);
 
-			const authClient = await createGoogleClient(authValue);
-
-			const sheets = google.sheets({ version: 'v4', auth: authClient });
-
-			const response = await sheets.spreadsheets.get({
-				spreadsheetId: spreadsheetId as unknown as string,
+			const response = await httpClient.sendRequest<{
+				sheets?: { properties?: { title?: string | null; sheetId?: number | null } }[];
+			}>({
+				method: HttpMethod.GET,
+				url: `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`,
+				authentication: {
+					type: AuthenticationType.BEARER_TOKEN,
+					token,
+				},
 			});
 
-			const sheetsData = response.data.sheets ?? [];
+			const sheetsData = response.body.sheets ?? [];
 
 			const options: DropdownOption<number>[] = [];
 
