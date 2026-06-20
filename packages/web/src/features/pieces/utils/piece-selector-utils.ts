@@ -2,6 +2,7 @@ import {
   PieceAuthProperty,
   PiecePropertyMap,
   piecePropertiesUtils,
+  pieceSensitivityUtils,
 } from '@activepieces/pieces-framework';
 import {
   FlowAction,
@@ -66,12 +67,19 @@ const isPieceStepInputValid = ({
   props: PiecePropertyMap;
   auth: PieceAuthProperty | PieceAuthProperty[] | undefined;
   input: Record<string, unknown>;
-  requireAuth: boolean;
+  requireAuth?: boolean;
 }): boolean => {
+  const resolvedRequireAuth =
+    pieceSensitivityUtils.resolvePieceComponentRequireAuth({
+      requireAuth,
+      pieceHasAuth: pieceSensitivityUtils.pieceHasAuth(auth),
+    });
   const schema = piecePropertiesUtils.buildSchema(props, auth);
   const hasAuth = !isNil(auth);
   const authValid =
-    !requireAuth || !hasAuth || !isNil(input[AUTHENTICATION_PROPERTY_NAME]);
+    !resolvedRequireAuth ||
+    !hasAuth ||
+    !isNil(input[AUTHENTICATION_PROPERTY_NAME]);
   return schema.safeParse(input).success && authValid;
 };
 

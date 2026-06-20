@@ -66,7 +66,7 @@ export const flowRunController: FastifyPluginAsyncZod = async (app) => {
         '/:id',
         GetRequest,
         async (request, reply) => {
-            const flowRun = await flowRunService(request.log).getOnePopulatedOrThrow({
+            const flowRun = await flowRunService(request.log).getOnePopulatedForDisplayOrThrow({
                 projectId: request.projectId,
                 id: request.params.id,
             })
