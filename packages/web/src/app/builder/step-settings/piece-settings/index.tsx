@@ -9,6 +9,8 @@ import {
 import React from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
+import { SensitiveOutputFieldsSection } from '@/features/sensitivity/components/sensitive-output-fields-section';
+import { SensitiveFieldsFormProvider } from '@/features/sensitivity/context/sensitive-fields-form-context';
 import { flagsHooks } from '@/hooks/flags-hooks';
 
 import { GenericPropertiesForm } from '../../piece-properties/generic-properties-form';
@@ -95,7 +97,7 @@ const PieceSettings = React.memo((props: PieceSettingsProps) => {
       )}
 
       {pieceModel && (
-        <>
+        <SensitiveFieldsFormProvider enabled>
           {pieceModel.auth && (showAuthForAction || showAuthForTrigger) && (
             <ConnectionSelect
               isTrigger={!isNil(selectedTrigger)}
@@ -104,44 +106,56 @@ const PieceSettings = React.memo((props: PieceSettingsProps) => {
             ></ConnectionSelect>
           )}
           {selectedAction && (
-            <GenericPropertiesForm
-              key={selectedAction.name}
-              prefixValue={'settings.input'}
-              props={actionPropsWithoutAuth}
-              propertySettings={selectedStep.settings.propertySettings}
-              disabled={props.readonly}
-              useMentionTextInput={true}
-              markdownVariables={markdownVariables}
-              dynamicPropsInfo={{
-                pieceName: pieceModel.name,
-                pieceVersion: pieceModel.version,
-                actionOrTriggerName: selectedAction.name,
-                placedInside: 'stepSettings',
-                updateFormSchema,
-                updatePropertySettingsSchema,
-              }}
-            ></GenericPropertiesForm>
+            <>
+              <GenericPropertiesForm
+                key={selectedAction.name}
+                prefixValue={'settings.input'}
+                props={actionPropsWithoutAuth}
+                propertySettings={selectedStep.settings.propertySettings}
+                disabled={props.readonly}
+                useMentionTextInput={true}
+                markdownVariables={markdownVariables}
+                dynamicPropsInfo={{
+                  pieceName: pieceModel.name,
+                  pieceVersion: pieceModel.version,
+                  actionOrTriggerName: selectedAction.name,
+                  placedInside: 'stepSettings',
+                  updateFormSchema,
+                  updatePropertySettingsSchema,
+                }}
+              ></GenericPropertiesForm>
+              <SensitiveOutputFieldsSection
+                outputSchema={selectedAction.outputSchema}
+                disabled={props.readonly}
+              />
+            </>
           )}
           {selectedTrigger && (
-            <GenericPropertiesForm
-              dynamicPropsInfo={{
-                pieceName: pieceModel.name,
-                pieceVersion: pieceModel.version,
-                actionOrTriggerName: selectedTrigger.name,
-                placedInside: 'stepSettings',
-                updateFormSchema,
-                updatePropertySettingsSchema,
-              }}
-              key={selectedTrigger.name}
-              prefixValue={'settings.input'}
-              props={triggerPropsWithoutAuth}
-              useMentionTextInput={true}
-              propertySettings={selectedStep.settings.propertySettings}
-              disabled={props.readonly}
-              markdownVariables={markdownVariables}
-            ></GenericPropertiesForm>
+            <>
+              <GenericPropertiesForm
+                dynamicPropsInfo={{
+                  pieceName: pieceModel.name,
+                  pieceVersion: pieceModel.version,
+                  actionOrTriggerName: selectedTrigger.name,
+                  placedInside: 'stepSettings',
+                  updateFormSchema,
+                  updatePropertySettingsSchema,
+                }}
+                key={selectedTrigger.name}
+                prefixValue={'settings.input'}
+                props={triggerPropsWithoutAuth}
+                useMentionTextInput={true}
+                propertySettings={selectedStep.settings.propertySettings}
+                disabled={props.readonly}
+                markdownVariables={markdownVariables}
+              ></GenericPropertiesForm>
+              <SensitiveOutputFieldsSection
+                outputSchema={selectedTrigger.outputSchema}
+                disabled={props.readonly}
+              />
+            </>
           )}
-        </>
+        </SensitiveFieldsFormProvider>
       )}
     </div>
   );
